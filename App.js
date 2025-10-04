@@ -31,9 +31,10 @@ const ASSIGNMENT_DETAIL_API_URL = `${BASE_URL}/api/assignment2/UserAssignmentDet
 const SCHEDULE_API_URL = `${BASE_URL}/api/schedule/MyDayCalendarStudentList/`;
 const APP_HOME_URL_FRAGMENT = '/app/';
 
-const APP_VERSION = '1.6.7'; // Fixed ReferenceError
+const APP_VERSION = '1.6.8'; 
 
 const CHANGELOG_DATA = [
+    { version: '1.6.8', changes: ['Fixed app name not showing on iOS'] },
     { version: '1.6.7', changes: ['Fixed ReferenceError for assignment details props.', 'SIX SEVEN!!!'] },
     { version: '1.6.6', changes: ['Added secret changelog page', 'Fixed bottom safe area layout', 'Fixed home page text centering', 'Updated to `react-native-safe-area-context`'] },
     { version: '1.6.5', changes: ['Removed assignment status update functionality due to constant bugs.'] },
