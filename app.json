@@ -12,11 +12,6 @@
       "bundleIdentifier": "com.rocket.mcdsmobile",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "icon": {
-        "light": "./assets/icon.png",
-        "dark": "./assets/adaptive-icon.png",
-        "tinted": "./assets/adaptive-icon.png"
       }
     },
     "android": {
