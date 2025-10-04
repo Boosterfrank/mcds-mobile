@@ -34,7 +34,7 @@ const APP_HOME_URL_FRAGMENT = '/app/';
 const APP_VERSION = '1.6.7'; // Fixed ReferenceError
 
 const CHANGELOG_DATA = [
-    { version: '1.6.7', changes: ['Fixed ReferenceError for assignment details props.'] },
+    { version: '1.6.7', changes: ['Fixed ReferenceError for assignment details props.', 'SIX SEVEN!!!'] },
     { version: '1.6.6', changes: ['Added secret changelog page', 'Fixed bottom safe area layout', 'Fixed home page text centering', 'Updated to `react-native-safe-area-context`'] },
     { version: '1.6.5', changes: ['Removed assignment status update functionality due to constant bugs.'] },
     { version: '1.6.4', changes: ['Restored the persistent hidden WebView logic to fix API calls for assignments and schedule.'] },

@@ -2,7 +2,7 @@
   "expo": {
     "name": "mcds-mobile",
     "slug": "mcds-mobile",
-    "version": "1.0.0",
+    "version": "1.6.7",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,7 +13,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.rocket.mcdsmobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,6 +28,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "47c08e81-5e75-4d3e-b2c5-2844b0f44dd0"
+      }
+    },
+    "owner": "boosterfrank"
   }
 }
