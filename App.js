@@ -468,10 +468,10 @@ const MorePage = ({ onOpenChangelog, onNavigate }) => {
     <View style={[styles.pageContentContainer, styles.placeholderAlignment]}>
       <Text style={styles.pageTitle}>More</Text>
       <View style={styles.menuList}>
-        <MenuItem label="Messages" />
-        <MenuItem label="Settings" />
-        <MenuItem label="Grades" />
-        <MenuItem label="Classes" />
+        <MenuItem label="Messages" onPress={() => onNavigate('Messages')} />
+        <MenuItem label="Settings" onPress={() => onNavigate('Settings')} />
+        <MenuItem label="Grades" onPress={() => onNavigate('Grades')} />
+        <MenuItem label="Classes" onPress={() => onNavigate('Classes')} />
         <MenuItem label="Resources" onPress={() => onNavigate('Resources')} />
       </View>
       <TouchableOpacity onLongPress={onOpenChangelog} delayLongPress={3000}>
