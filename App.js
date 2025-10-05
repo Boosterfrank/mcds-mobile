@@ -9,18 +9,22 @@ import {
   TouchableOpacity,
   Animated,
   ScrollView,
+  Alert,
   Modal
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { SvgXml } from 'react-native-svg';
+import * as Clipboard from 'expo-clipboard';
 import moment from 'moment';
+import * as Linking from 'expo-linking';
 
 // --- SVG Icon Definitions ---
 const homeIconXml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8h5z"/></svg>`;
 const assignmentsIconXml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>`;
 const scheduleIconXml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM9 14H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zm-8 4H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z"/></svg>`;
 const menuIconXml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>`;
+const CopyIconXml = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <g id="Edit / Copy"> <path id="Vector" d="M9 9V6.2002C9 5.08009 9 4.51962 9.21799 4.0918C9.40973 3.71547 9.71547 3.40973 10.0918 3.21799C10.5196 3 11.0801 3 12.2002 3H17.8002C18.9203 3 19.4801 3 19.9079 3.21799C20.2842 3.40973 20.5905 3.71547 20.7822 4.0918C21.0002 4.51962 21.0002 5.07967 21.0002 6.19978V11.7998C21.0002 12.9199 21.0002 13.48 20.7822 13.9078C20.5905 14.2841 20.2839 14.5905 19.9076 14.7822C19.4802 15 18.921 15 17.8031 15H15M9 9H6.2002C5.08009 9 4.51962 9 4.0918 9.21799C3.71547 9.40973 3.40973 9.71547 3.21799 10.0918C3 10.5196 3 11.0801 3 12.2002V17.8002C3 18.9203 3 19.4801 3.21799 19.9079C3.40973 20.2842 3.71547 20.5905 4.0918 20.7822C4.5192 21 5.07899 21 6.19691 21H11.8036C12.9215 21 13.4805 21 13.9079 20.7822C14.2842 20.5905 14.5905 20.2839 14.7822 19.9076C15 19.4802 15 18.921 15 17.8031V15M9 9H11.8002C12.9203 9 13.4801 9 13.9079 9.21799C14.2842 9.40973 14.5905 9.71547 14.7822 10.0918C15 10.5192 15 11.079 15 12.1969L15 15" stroke="#A0A0A0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path> </g> </g></svg>`;
 
 // --- Configuration ---
 const BASE_URL = 'https://miamicountryday.myschoolapp.com';
@@ -31,11 +35,12 @@ const ASSIGNMENT_DETAIL_API_URL = `${BASE_URL}/api/assignment2/UserAssignmentDet
 const SCHEDULE_API_URL = `${BASE_URL}/api/schedule/MyDayCalendarStudentList/`;
 const APP_HOME_URL_FRAGMENT = '/app/';
 
-const APP_VERSION = '1.6.8'; 
+const APP_VERSION = '1.6.9'; 
 
 const CHANGELOG_DATA = [
+    { version: '1.6.9', changes: ['Added the Resources page for easy accses to announcements and more', 'Added more user info such as email and graduation year', 'Fixed assignments before last week not loading in', 'Added ability to copy email'] },
     { version: '1.6.8', changes: ['Fixed app name not showing on iOS'] },
-    { version: '1.6.7', changes: ['Fixed ReferenceError for assignment details props.', 'SIX SEVEN!!!'] },
+    { version: '1.6.7', changes: ['Fixed ReferenceError for assignment details.', 'SIX SEVEN!!!'] },
     { version: '1.6.6', changes: ['Added secret changelog page', 'Fixed bottom safe area layout', 'Fixed home page text centering', 'Updated to `react-native-safe-area-context`'] },
     { version: '1.6.5', changes: ['Removed assignment status update functionality due to constant bugs.'] },
     { version: '1.6.4', changes: ['Restored the persistent hidden WebView logic to fix API calls for assignments and schedule.'] },
@@ -90,6 +95,7 @@ const App = () => {
       });
       true;
     `;
+    console.log('[WebView Fetch]', type, url);
     webviewRef.current?.injectJavaScript(script);
   };
 
@@ -106,7 +112,7 @@ const App = () => {
       };
 
       if (message.type === 'API_ERROR') {
-        triggerRelogin(`API Error: ${message.error}. Please sign in again.`);
+        triggerRelogin(`API Error: ${message.error}. Please sign in.`);
         return;
       }
       
@@ -161,10 +167,15 @@ const App = () => {
   }, [schedule]);
 
   const fetchAssignmentDetailsCallback = useCallback((assignmentIndexId) => {
-    if (!userInfo) return;
+    if (!userInfo) {
+      console.warn('[FetchDetail] No user info, aborting');
+      return;
+    }
     const url = `${ASSIGNMENT_DETAIL_API_URL}?assignmentIndexId=${assignmentIndexId}&studentUserId=${userInfo.UserId}&personaId=2`;
+    console.log('[FetchDetail] Requesting details for', assignmentIndexId, 'URL:', url);
     fetchApiInWebView(url, 'ASSIGNMENT_DETAIL');
   }, [userInfo]);
+
 
   return (
     <View style={styles.appContainer}>
@@ -211,6 +222,7 @@ const App = () => {
                 assignmentDetails={assignmentDetails}
                 fetchAssignmentDetails={fetchAssignmentDetailsCallback}
                 onOpenChangelog={() => setIsChangelogVisible(true)}
+                onNavigate={setActivePage}
             />
             <View style={{backgroundColor: styles.navBar.backgroundColor}}>
                 <BottomNavBar activePage={activePage} onNavigate={setActivePage} />
@@ -224,7 +236,7 @@ const App = () => {
 
 // --- Page Content Wrapper with Transitions ---
 
-const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assignmentDetails, fetchAssignmentDetails, schedule, fetchSchedule, isLoading, onOpenChangelog }) => {
+const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assignmentDetails, fetchAssignmentDetails, schedule, fetchSchedule, isLoading, onOpenChangelog, onNavigate  }) => {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     useEffect(() => {
         fadeAnim.setValue(0);
@@ -236,7 +248,16 @@ const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assi
         case 'Home': currentPageComponent = <HomePage userInfo={userInfo} />; break;
         case 'Assignments': currentPageComponent = <AssignmentCenterPage assignments={assignments} fetchAssignments={fetchAssignments} isLoading={isLoading} assignmentDetails={assignmentDetails} fetchAssignmentDetails={fetchAssignmentDetails} />; break;
         case 'Schedule': currentPageComponent = <SchedulePage scheduleData={schedule} fetchSchedule={fetchSchedule} isLoading={isLoading} />; break;
-        case 'More': currentPageComponent = <MorePage onOpenChangelog={onOpenChangelog} />; break;
+        case 'More':
+          currentPageComponent = (
+            <MorePage onOpenChangelog={onOpenChangelog} onNavigate={onNavigate} />
+          );
+          break;
+        case 'Resources':
+          currentPageComponent = (
+            <ResourcesPage onNavigateBack={() => onNavigate('More')} />
+          );
+          break;
         default: currentPageComponent = <PlaceholderPage title="Not Found" />;
     }
 
@@ -255,7 +276,21 @@ const HomePage = ({ userInfo }) => {
       ) : (
          <View style={[styles.profileImage, styles.profileImagePlaceholder]}><Text style={styles.profileImagePlaceholderText}>{userInfo.FirstName.charAt(0)}</Text></View>
       )}
-      <Text style={styles.pageContentText}>Welcome to your dashboard.</Text>
+      <View style={styles.emailRow}>
+        <TouchableOpacity
+          style={styles.emailTouchable}
+          onPress={async () => {
+            await Clipboard.setStringAsync(userInfo.Email);
+            Alert.alert('Copied', 'Your email has been copied to the clipboard.');
+          }}
+        >
+          <View style={styles.emailInner}>
+            <Text style={styles.emailText}>{userInfo.Email}</Text>
+            <SvgXml xml={CopyIconXml} width={18} height={18} style={styles.copyIcon} />
+          </View>
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.pageContentText}>Class of {userInfo.StudentInfo?.GradYear}</Text>
     </View>
   );
 };
@@ -326,7 +361,7 @@ const AssignmentCenterPage = ({ assignments, fetchAssignments, updateStatus, isL
         return <View style={styles.pageContentContainer}><ActivityIndicator size="large" color="#FFFFFF" /><Text style={styles.pageContentText}>Loading Assignments...</Text></View>;
     }
     
-    const allAssignments = assignments ? [...assignments.Overdue, ...assignments.DueToday, ...assignments.DueTomorrow, ...assignments.DueThisWeek, ...assignments.DueNextWeek, ...assignments.DueAfterNextWeek] : [];
+    const allAssignments = assignments ? [...assignments.PastBeforeLastWeek, ...assignments.PastLastWeek, ...assignments.PastThisWeek, ...assignments.Overdue, ...assignments.DueToday, ...assignments.DueTomorrow, ...assignments.DueThisWeek, ...assignments.DueNextWeek, ...assignments.DueAfterNextWeek] : [];
     
     const today = moment().add(weekOffset, 'weeks');
     const startOfWeek = today.clone().startOf('week');
@@ -421,13 +456,30 @@ const getStatusInfo = (statusType) => {
     }
 };
 
-const MorePage = ({ onOpenChangelog }) => {
-  const MenuItem = ({ label }) => (<TouchableOpacity style={styles.menuItem}><Text style={styles.menuItemText}>{label}</Text><Text style={styles.menuItemArrow}>{'>'}</Text></TouchableOpacity>);
+const MorePage = ({ onOpenChangelog, onNavigate }) => {
+  const MenuItem = ({ label, onPress }) => (
+    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
+      <Text style={styles.menuItemText}>{label}</Text>
+      <Text style={styles.menuItemArrow}>{'>'}</Text>
+    </TouchableOpacity>
+  );
+
   return (
     <View style={[styles.pageContentContainer, styles.placeholderAlignment]}>
       <Text style={styles.pageTitle}>More</Text>
-      <ScrollView style={styles.menuList}><MenuItem label="Messages" /><MenuItem label="Settings" /><MenuItem label="Grades" /><MenuItem label="Classes" /><MenuItem label="Resources" /></ScrollView>
-      <TouchableOpacity onLongPress={onOpenChangelog} delayLongPress={3000}><View style={styles.versionInfo}><Text style={styles.versionAppName}>MCDS Mobile</Text><Text style={styles.versionNumber}>Version {APP_VERSION}</Text></View></TouchableOpacity>
+      <View style={styles.menuList}>
+        <MenuItem label="Messages" />
+        <MenuItem label="Settings" />
+        <MenuItem label="Grades" />
+        <MenuItem label="Classes" />
+        <MenuItem label="Resources" onPress={() => onNavigate('Resources')} />
+      </View>
+      <TouchableOpacity onLongPress={onOpenChangelog} delayLongPress={3000}>
+        <View style={styles.versionInfo}>
+          <Text style={styles.versionAppName}>MCDS Mobile</Text>
+          <Text style={styles.versionNumber}>Version {APP_VERSION}</Text>
+        </View>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -448,6 +500,42 @@ const ChangelogPage = ({ onClose }) => (
         </ScrollView>
     </SafeAreaView>
 );
+
+const ResourcesPage = ({ onNavigateBack }) => {
+  const handleOpenLink = (url) => {
+    Linking.openURL(url).catch(err => console.error("Couldn't load page", err));
+  };
+
+  const ResourceItem = ({ label, url }) => (
+    <TouchableOpacity
+      style={styles.menuItem}
+      onPress={() => handleOpenLink(url)}
+    >
+      <Text style={styles.menuItemText}>{label}</Text>
+      <Text style={styles.menuItemArrow}>{'>'}</Text>
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={[styles.pageContentContainer, styles.placeholderAlignment]}>
+      <Text style={styles.pageTitle}>Resources</Text>
+      <View style={styles.menuList}>
+        <ResourceItem
+          label="Announcements"
+          url="https://www.canva.com/design/DAGOf_CuuSg/Lp8cITfl7i2Rfe4ehxPkwg/edit"
+        />
+        <ResourceItem
+          label="Lunch Menu"
+          url="https://www.sagedining.com/sites/miamicountryday/menu"
+        />
+        <ResourceItem
+          label="The Spartacus"
+          url="https://www.thespartacus.com"
+        />
+      </View>
+    </View>
+  );
+};
 
 const PlaceholderPage = ({ title }) => <View style={[styles.pageContentContainer, styles.placeholderAlignment]}><Text style={styles.pageTitle}>{title}</Text><Text style={styles.pageContentText}>This feature is coming soon.</Text></View>;
 const BottomNavBar = ({ activePage, onNavigate }) => {
@@ -534,7 +622,12 @@ const styles = StyleSheet.create({
   changelogContent: { paddingHorizontal: 20 },
   changelogVersion: { marginBottom: 25 },
   changelogVersionTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: 'bold', marginBottom: 10 },
-  changelogChangeItem: { color: '#E5E5EA', fontSize: 16, marginBottom: 5, paddingLeft: 10, lineHeight: 22 }
+  changelogChangeItem: { color: '#E5E5EA', fontSize: 16, marginBottom: 5, paddingLeft: 10, lineHeight: 22 },
+  emailRow: { width: '100%', alignItems: 'center', marginTop: 10 },
+  emailTouchable: { alignItems: 'center', justifyContent: 'center' },
+  emailInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  emailText: { fontSize: 16, color: '#A0A0A0', textAlign: 'center', marginRight: 5, marginLeft: 10 },
+  copyIcon: { tintColor: '#A0A0A0', marginLeft: 2 },
 });
 
 
