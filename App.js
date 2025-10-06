@@ -35,9 +35,10 @@ const ASSIGNMENT_DETAIL_API_URL = `${BASE_URL}/api/assignment2/UserAssignmentDet
 const SCHEDULE_API_URL = `${BASE_URL}/api/schedule/MyDayCalendarStudentList/`;
 const APP_HOME_URL_FRAGMENT = '/app/';
 
-const APP_VERSION = '1.6.9'; 
+const APP_VERSION = '1.7.0'; 
 
 const CHANGELOG_DATA = [
+    { version: '1.7.0', changes: ['Added UpdateCheck', ''] },
     { version: '1.6.9', changes: ['Added the Resources page for easy accses to announcements and more', 'Added more user info such as email and graduation year', 'Fixed assignments before last week not loading in', 'Added ability to copy email'] },
     { version: '1.6.8', changes: ['Fixed app name not showing on iOS'] },
     { version: '1.6.7', changes: ['Fixed ReferenceError for assignment details.', 'SIX SEVEN!!!'] },
@@ -176,6 +177,38 @@ const App = () => {
     fetchApiInWebView(url, 'ASSIGNMENT_DETAIL');
   }, [userInfo]);
 
+  // --- Update check on app launch ---
+  useEffect(() => {
+    const compareVersions = (a, b) => {
+      const pa = a.split('.').map(Number);
+      const pb = b.split('.').map(Number);
+      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const diff = (pa[i] || 0) - (pb[i] || 0);
+        if (diff) return diff > 0 ? 1 : -1;
+      }
+      return 0;
+    };
+
+    const checkForUpdate = async () => {
+      try {
+        const response = await fetch('https://boosterfrank.vercel.app/mobile/mcds/ver.txt');
+        const latestVersion = (await response.text()).trim();
+        console.log('[VersionCheck] Current:', APP_VERSION, '| Latest:', latestVersion);
+
+        if (compareVersions(latestVersion, APP_VERSION) > 0) {
+          Alert.alert(
+            'Update Available',
+            `A new version (${latestVersion}) of MCDS Mobile is available.\nYou are currently on ${APP_VERSION}. Please go to update it.`,
+            [{ text: 'OK' }],
+          );
+        }
+      } catch (err) {
+        console.warn('[VersionCheck] Failed:', err);
+      }
+    };
+
+    checkForUpdate();
+  }, []);
 
   return (
     <View style={styles.appContainer}>
@@ -629,6 +662,4 @@ const styles = StyleSheet.create({
   emailText: { fontSize: 16, color: '#A0A0A0', textAlign: 'center', marginRight: 5, marginLeft: 10 },
   copyIcon: { tintColor: '#A0A0A0', marginLeft: 2 },
 });
-
-
 export default AppWrapper;
