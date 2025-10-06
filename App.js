@@ -10,6 +10,7 @@ import {
   Animated,
   ScrollView,
   Alert,
+  RefreshControl,
   Modal
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -38,7 +39,7 @@ const APP_HOME_URL_FRAGMENT = '/app/';
 const APP_VERSION = '1.7.0'; 
 
 const CHANGELOG_DATA = [
-    { version: '1.7.0', changes: ['Added UpdateCheck', 'Fixed assignment description not loading'] },
+    { version: '1.7.0', changes: ['Added UpdateCheck', 'Fixed assignment description not loading', 'Added pull down to refresh'] },
     { version: '1.6.9', changes: ['Added the Resources page for easy accses to announcements and more', 'Added more user info such as email and graduation year', 'Fixed assignments before last week not loading in', 'Added ability to copy email'] },
     { version: '1.6.8', changes: ['Fixed app name not showing on iOS'] },
     { version: '1.6.7', changes: ['Fixed ReferenceError for assignment details.', 'SIX SEVEN!!!'] },
@@ -350,17 +351,42 @@ const SchedulePage = ({ scheduleData, fetchSchedule, isLoading }) => {
                 <TouchableOpacity onPress={() => setCurrentDate(moment())}><Text style={styles.dateHeaderText}>{currentDate.isSame(moment(), 'day') ? 'Today' : currentDate.format('ddd, MMM D')}</Text></TouchableOpacity>
                 <TouchableOpacity onPress={() => changeDay(1)} style={styles.dateNavButton}><Text style={styles.dateNavText}>{'Next >'}</Text></TouchableOpacity>
             </View>
-            <ScrollView style={{width: '100%'}}>
-                {isLoading && !scheduleForDay ? <ActivityIndicator size="large" color="#FFFFFF" style={{marginTop: 40}}/> :
-                 scheduleForDay && scheduleForDay.length > 0 ? scheduleForDay.map((item, index) => (
-                    <View key={index} style={styles.scheduleCard}>
-                        <View style={[styles.scheduleColorBar, { backgroundColor: getColorForCourse(item.CourseTitle) }]} />
-                        <View style={styles.scheduleTime}><Text style={styles.scheduleTimeText}>{item.MyDayStartTime}</Text><Text style={styles.scheduleTimeText}>{item.MyDayEndTime}</Text></View>
-                        <View style={styles.scheduleDetails}><Text style={styles.scheduleCourseTitle}>{item.CourseTitle}</Text><Text style={styles.scheduleSubText}>{item.Contact}</Text><Text style={styles.scheduleSubText}>{item.BuildingName} - {item.RoomNumber}</Text></View>
-                        <View style={styles.scheduleBlock}><Text style={styles.scheduleBlockText}>{item.Block}</Text></View>
-                    </View>
-                )) : <Text style={styles.noAssignmentsText}>No classes scheduled for this day.</Text>}
-            </ScrollView>
+          <ScrollView
+            style={{ width: '100%' }}
+            refreshControl={
+              <RefreshControl
+                refreshing={isLoading}
+                onRefresh={() => fetchSchedule(currentDate.format('M/D/YYYY'))}
+                tintColor="#FFFFFF"
+              />
+            }
+          >
+            {isLoading && !scheduleForDay ? (
+              <ActivityIndicator size="large" color="#FFFFFF" style={{ marginTop: 40 }} />
+            ) : scheduleForDay && scheduleForDay.length > 0 ? (
+              scheduleForDay.map((item, index) => (
+                <View key={index} style={styles.scheduleCard}>
+                  <View style={[styles.scheduleColorBar, { backgroundColor: getColorForCourse(item.CourseTitle) }]} />
+                  <View style={styles.scheduleTime}>
+                    <Text style={styles.scheduleTimeText}>{item.MyDayStartTime}</Text>
+                    <Text style={styles.scheduleTimeText}>{item.MyDayEndTime}</Text>
+                  </View>
+                  <View style={styles.scheduleDetails}>
+                    <Text style={styles.scheduleCourseTitle}>{item.CourseTitle}</Text>
+                    <Text style={styles.scheduleSubText}>{item.Contact}</Text>
+                    <Text style={styles.scheduleSubText}>
+                      {item.BuildingName} - {item.RoomNumber}
+                    </Text>
+                  </View>
+                  <View style={styles.scheduleBlock}>
+                    <Text style={styles.scheduleBlockText}>{item.Block}</Text>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.noAssignmentsText}>No classes scheduled for this day.</Text>
+            )}
+          </ScrollView>
         </View>
     );
 };
@@ -420,9 +446,28 @@ const AssignmentCenterPage = ({ assignments, fetchAssignments, updateStatus, isL
                 <Text style={styles.weekHeaderText}>{startOfWeek.format('MMM D')} - {endOfWeek.format('MMM D, YYYY')}</Text>
                 <TouchableOpacity onPress={() => setWeekOffset(weekOffset + 1)} style={styles.weekNavButton}><Text style={styles.weekNavText}>{'Next >'}</Text></TouchableOpacity>
             </View>
-            <ScrollView style={{width: '100%'}}>
-                {filteredAssignments.length > 0 ? filteredAssignments.map(item => <AssignmentCard key={item.AssignmentIndexId} assignment={item} onSelect={() => handleSelectAssignment(item)} />) : <Text style={styles.noAssignmentsText}>No assignments due this week.</Text>}
-            </ScrollView>
+          <ScrollView
+            style={{ width: '100%' }}
+            refreshControl={
+              <RefreshControl
+                refreshing={isLoading}
+                onRefresh={fetchAssignments}
+                tintColor="#FFFFFF"
+              />
+            }
+          >
+            {filteredAssignments.length > 0 ? (
+              filteredAssignments.map(item => (
+                <AssignmentCard
+                  key={item.AssignmentIndexId}
+                  assignment={item}
+                  onSelect={() => handleSelectAssignment(item)}
+                />
+              ))
+            ) : (
+              <Text style={styles.noAssignmentsText}>No assignments due this week.</Text>
+            )}
+          </ScrollView>
         </View>
     );
 };
@@ -515,7 +560,7 @@ const MorePage = ({ onOpenChangelog, onNavigate }) => {
         <MenuItem label="Classes" onPress={() => onNavigate('Classes')} />
         <MenuItem label="Resources" onPress={() => onNavigate('Resources')} />
       </View>
-      <TouchableOpacity onLongPress={onOpenChangelog} delayLongPress={3000}>
+      <TouchableOpacity onLongPress={onOpenChangelog} delayLongPress={2000}>
         <View style={styles.versionInfo}>
           <Text style={styles.versionAppName}>MCDS Mobile</Text>
           <Text style={styles.versionNumber}>Version {APP_VERSION}</Text>
@@ -631,7 +676,7 @@ const styles = StyleSheet.create({
   scheduleTime: { padding: 15, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderRightColor: '#3A3A3C'},
   scheduleTimeText: { color: '#E5E5EA', fontSize: 14 },
   scheduleDetails: { flex: 1, padding: 15},
-  scheduleCourseTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
+  scheduleCourseTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', marginBottom: 4},
   scheduleSubText: { color: '#8E8E93', fontSize: 14 },
   scheduleBlock: { padding: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#3A3A3C'},
   scheduleBlockText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
