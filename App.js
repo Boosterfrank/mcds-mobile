@@ -38,7 +38,7 @@ const APP_HOME_URL_FRAGMENT = '/app/';
 const APP_VERSION = '1.7.0'; 
 
 const CHANGELOG_DATA = [
-    { version: '1.7.0', changes: ['Added UpdateCheck', ''] },
+    { version: '1.7.0', changes: ['Added UpdateCheck', 'Fixed assignment description not loading'] },
     { version: '1.6.9', changes: ['Added the Resources page for easy accses to announcements and more', 'Added more user info such as email and graduation year', 'Fixed assignments before last week not loading in', 'Added ability to copy email'] },
     { version: '1.6.8', changes: ['Fixed app name not showing on iOS'] },
     { version: '1.6.7', changes: ['Fixed ReferenceError for assignment details.', 'SIX SEVEN!!!'] },
@@ -441,14 +441,22 @@ const AssignmentDetailModal = ({ visible, assignment, details, isLoadingDetails,
     
     const gradeInfo = details?.AssignmentGrade;
     const maxPoints = details?.MaxPoints;
-    
+
     return (
         <Modal visible={visible} transparent={true} animationType="fade" onRequestClose={onClose}>
             <View style={styles.modalBackdrop}>
                 <View style={styles.modalContainer}>
                     <Text style={styles.modalTitle} numberOfLines={2}>{assignment.GroupName}</Text>
-                    <Text style={styles.modalDescription}>{cleanHtml(assignment.ShortDescription)}</Text>
-                    
+                    <Text style={styles.modalSectionTitle}>Title</Text>
+                    <Text style={styles.modalDescription}>{cleanHtml(details?.ShortDescription)}</Text>
+                    <Text style={styles.modalSectionTitle}>Description</Text>
+                    {isLoadingDetails ? <ActivityIndicator color="#FFFFFF"/> :
+                      details?.LongDescription && details?.LongDescription === 1 ?
+                        <View>
+                          <Text style={styles.modalDescription}>{cleanHtml("No Description Provided")}</Text>
+                        </View> :
+                          <Text style={styles.modalDescription}>{cleanHtml(details?.LongDescription)}</Text>
+                    }
                     <View style={styles.modalSection}>
                         <Text style={styles.modalSectionTitle}>Status</Text>
                         <Text style={[styles.modalStatusText, { color }]}>{status}</Text>
@@ -635,7 +643,7 @@ const styles = StyleSheet.create({
   assignmentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   assignmentClass: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', flex: 1, marginRight: 10 },
   assignmentStatus: { fontSize: 12, fontWeight: '700' },
-  assignmentDesc: { color: '#E5E5EA', fontSize: 14, marginBottom: 12 },
+  assignmentDesc: { color: '#E5E5EA', fontSize: 15, marginBottom: 12 },
   assignmentDue: { color: '#8E8E93', fontSize: 12 },
   noAssignmentsText: { color: '#8E8E93', textAlign: 'center', marginTop: 40, fontSize: 16},
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
@@ -662,4 +670,6 @@ const styles = StyleSheet.create({
   emailText: { fontSize: 16, color: '#A0A0A0', textAlign: 'center', marginRight: 5, marginLeft: 10 },
   copyIcon: { tintColor: '#A0A0A0', marginLeft: 2 },
 });
+
+
 export default AppWrapper;
