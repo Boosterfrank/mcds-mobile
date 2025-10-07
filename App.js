@@ -34,11 +34,14 @@ const CONTEXT_API_URL = `${BASE_URL}/api/webapp/context`;
 const ASSIGNMENTS_API_URL = `${BASE_URL}/api/assignment2/StudentAssignmentCenterGet?displayByDueDate=true`;
 const ASSIGNMENT_DETAIL_API_URL = `${BASE_URL}/api/assignment2/UserAssignmentDetailsGetAllStudentData`;
 const SCHEDULE_API_URL = `${BASE_URL}/api/schedule/MyDayCalendarStudentList/`;
+const GRADES_API_URL = `${BASE_URL}/api/datadirect/ParentStudentUserClassesGet`;
+const GRADE_DETAILS_API_URL = `${BASE_URL}/api/gradebook/AssignmentPerformanceStudent`;
 const APP_HOME_URL_FRAGMENT = '/app/';
 
-const APP_VERSION = '1.7.0'; 
+const APP_VERSION = '1.7.1'; 
 
 const CHANGELOG_DATA = [
+    { version: '1.7.1', changes: ['Added Grades page', 'Added GPA calculator (Grades)', 'Added Back button', 'Fixed login crash'] },
     { version: '1.7.0', changes: ['Added UpdateCheck', 'Fixed assignment description not loading', 'Added pull down to refresh'] },
     { version: '1.6.9', changes: ['Added the Resources page for easy accses to announcements and more', 'Added more user info such as email and graduation year', 'Fixed assignments before last week not loading in', 'Added ability to copy email'] },
     { version: '1.6.8', changes: ['Fixed app name not showing on iOS'] },
@@ -68,6 +71,8 @@ const App = () => {
   const [schedule, setSchedule] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [isChangelogVisible, setIsChangelogVisible] = useState(false);
+  const [grades, setGrades] = useState(null);
+  const [selectedCourseDetails, setSelectedCourseDetails] = useState(null);
   
   const webviewRef = useRef(null);
 
@@ -115,6 +120,7 @@ const App = () => {
 
       if (message.type === 'API_ERROR') {
         triggerRelogin(`API Error: ${message.error}. Please sign in.`);
+        console.log(responseData);
         return;
       }
       
@@ -141,6 +147,12 @@ const App = () => {
         } else if (message.type === 'ASSIGNMENT_DETAIL') {
             setAssignmentDetails(prev => ({...prev, [responseData.AssignmentIndexId]: responseData}));
 
+        }
+        else if (message.type === 'GRADES') {
+          setGrades(responseData);
+        }
+        else if (message.type === 'GRADE_DETAILS') {
+          setSelectedCourseDetails(responseData);
         }
         setIsLoading(false);
       }
@@ -177,6 +189,17 @@ const App = () => {
     console.log('[FetchDetail] Requesting details for', assignmentIndexId, 'URL:', url);
     fetchApiInWebView(url, 'ASSIGNMENT_DETAIL');
   }, [userInfo]);
+
+  const fetchGradesCallback = useCallback(() => {
+    if (!userInfo) return;
+    const url = `${GRADES_API_URL}?userId=${userInfo.UserId}&memberLevel=3&persona=2&durationList=172112`;
+    fetchApiInWebView(url, 'GRADES');
+  }, [userInfo]);
+
+  const fetchGradeDetails = useCallback((sectionId, markingPeriodId, studentId) => {
+    const url = `${GRADE_DETAILS_API_URL}?sectionId=${sectionId}&markingPeriodId=${markingPeriodId}&studentId=${studentId}`;
+    fetchApiInWebView(url, 'GRADE_DETAILS');
+  }, []);
 
   // --- Update check on app launch ---
   useEffect(() => {
@@ -246,17 +269,25 @@ const App = () => {
                 <Text style={styles.appTitle}>MCDS Mobile</Text>
             </View>
             <PageContent 
-                activePage={activePage} 
-                userInfo={userInfo} 
-                assignments={assignments}
-                fetchAssignments={fetchAssignmentsCallback}
-                schedule={schedule}
-                fetchSchedule={fetchScheduleCallback}
-                isLoading={isLoading}
-                assignmentDetails={assignmentDetails}
-                fetchAssignmentDetails={fetchAssignmentDetailsCallback}
-                onOpenChangelog={() => setIsChangelogVisible(true)}
-                onNavigate={setActivePage}
+              activePage={activePage} 
+              userInfo={userInfo} 
+              assignments={assignments}
+              fetchAssignments={fetchAssignmentsCallback}
+              schedule={schedule}
+              fetchSchedule={fetchScheduleCallback}
+              grades={grades}
+              fetchGrades={fetchGradesCallback}
+              fetchGradeDetails={fetchGradeDetails}
+              isLoading={isLoading}
+              assignmentDetails={assignmentDetails}
+              fetchAssignmentDetails={fetchAssignmentDetailsCallback}
+              onOpenChangelog={() => setIsChangelogVisible(true)}
+              onNavigate={setActivePage}
+            />
+            <GradeDetailsModal
+              visible={!!selectedCourseDetails}
+              details={selectedCourseDetails}
+              onClose={() => setSelectedCourseDetails(null)}
             />
             <View style={{backgroundColor: styles.navBar.backgroundColor}}>
                 <BottomNavBar activePage={activePage} onNavigate={setActivePage} />
@@ -268,9 +299,19 @@ const App = () => {
   );
 };
 
-// --- Page Content Wrapper with Transitions ---
+const BackHeader = ({ title, onBack }) => (
+  <View style={styles.backHeader}>
+    <TouchableOpacity onPress={onBack} style={styles.backButton}>
+      <Text style={styles.backArrow}>{'‹'}</Text>
+      <Text style={styles.backText}>Back</Text>
+    </TouchableOpacity>
+    <Text style={styles.backHeaderTitle}>{title}</Text>
+    <View style={{ width: 60 }} />
+  </View>
+);
 
-const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assignmentDetails, fetchAssignmentDetails, schedule, fetchSchedule, isLoading, onOpenChangelog, onNavigate  }) => {
+// --- Page Content Wrapper with Transitions ---
+const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assignmentDetails, fetchAssignmentDetails, schedule, fetchSchedule, isLoading, onOpenChangelog, onNavigate, grades, fetchGrades, fetchGradeDetails }) => {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     useEffect(() => {
         fadeAnim.setValue(0);
@@ -286,13 +327,25 @@ const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assi
           currentPageComponent = (
             <MorePage onOpenChangelog={onOpenChangelog} onNavigate={onNavigate} />
           );
-          break;
+        break;
+        case 'Grades':
+          currentPageComponent = (
+            <GradesPage 
+              userInfo={userInfo}
+              onNavigateBack={() => onNavigate('More')}
+              grades={grades} 
+              fetchGrades={fetchGrades} 
+              fetchGradeDetails={fetchGradeDetails} 
+              isLoading={isLoading} 
+            />
+          );
+        break;
         case 'Resources':
           currentPageComponent = (
             <ResourcesPage onNavigateBack={() => onNavigate('More')} />
           );
-          break;
-        default: currentPageComponent = <PlaceholderPage title="Not Found" />;
+        break;
+        default: currentPageComponent = <PlaceholderPage title="Not Found" onNavigateBack={() => onNavigate('More')} />;
     }
 
     return <Animated.View style={[styles.mainContent, { opacity: fadeAnim }]}>{currentPageComponent}</Animated.View>;
@@ -569,7 +622,6 @@ const MorePage = ({ onOpenChangelog, onNavigate }) => {
     </View>
   );
 };
-
 const ChangelogPage = ({ onClose }) => (
     <SafeAreaView style={styles.changelogContainer}>
         <View style={styles.changelogHeader}>
@@ -587,16 +639,168 @@ const ChangelogPage = ({ onClose }) => (
     </SafeAreaView>
 );
 
-const ResourcesPage = ({ onNavigateBack }) => {
-  const handleOpenLink = (url) => {
-    Linking.openURL(url).catch(err => console.error("Couldn't load page", err));
+const GradesPage = ({ userInfo, grades, fetchGrades, fetchGradeDetails, isLoading, onNavigateBack }) => {
+  useEffect(() => {
+    if (!grades) fetchGrades();
+  }, []);
+
+  // --- GPA Calculator ---
+  const calculateGPA = () => {
+    if (!grades || grades.length === 0) return { weighted: 0, unweighted: 0 };
+
+    let totalWeighted = 0;
+    let totalUnweighted = 0;
+    let count = 0;
+
+    grades.forEach(course => {
+      const grade = parseFloat(course.cumgrade);
+      if (isNaN(grade)) return;
+
+      let gpa = 0;
+      if (grade >= 90) gpa = 4.0;
+      else if (grade >= 80) gpa = 3.0;
+      else if (grade >= 70) gpa = 2.0;
+      else if (grade >= 60) gpa = 1.0;
+      else gpa = 0.0;
+
+      const isHonors = course.sectionidentifier?.includes('- H');
+      const isAP = course.sectionidentifier?.includes('- AP');
+      const weightBonus = isAP ? 1.0 : isHonors ? 0.5 : 0.0;
+
+      totalUnweighted += gpa;
+      totalWeighted += gpa + weightBonus;
+      count++;
+    });
+
+    return {
+      weighted: (totalWeighted / count).toFixed(2),
+      unweighted: (totalUnweighted / count).toFixed(2),
+    };
   };
 
+  const { weighted, unweighted } = calculateGPA();
+
+  // --- Render ---
+  return (
+  <View style={styles.pageContentContainer}>
+    <BackHeader title="Grades" onBack={onNavigateBack} />
+
+      {/* GPA Summary */}
+      {grades && grades.length > 0 && (
+        <View style={styles.gpaContainer}>
+          <View style={styles.gpaBox}>
+            <Text style={styles.gpaLabel}>Weighted GPA</Text>
+            <Text style={styles.gpaValue}>{weighted}</Text>
+          </View>
+          <View style={styles.gpaBox}>
+            <Text style={styles.gpaLabel}>Unweighted GPA</Text>
+            <Text style={styles.gpaValue}>{unweighted}</Text>
+          </View>
+        </View>
+      )}
+
+      <ScrollView
+        style={{ width: '100%' }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={fetchGrades}
+            tintColor="#FFFFFF"
+          />
+        }
+      >
+        {isLoading && !grades ? (
+          <ActivityIndicator size="large" color="#FFFFFF" style={{ marginTop: 40 }} />
+        ) : grades && grades.length > 0 ? (
+          grades.map((course, index) => (
+            <TouchableOpacity 
+              key={index} 
+              style={styles.gradeCard} 
+              onPress={() => fetchGradeDetails(course.sectionid, course.markingperiodid, userInfo.UserId)}
+            >
+              <View style={styles.gradeHeader}>
+                <Text style={styles.gradeTitle}>{course.sectionidentifier}</Text>
+                <Text style={styles.gradeValue}>{course.cumgrade ? `${course.cumgrade}%` : 'N/A'}</Text>
+              </View>
+              <Text style={styles.gradeSubText}>{course.groupownername}</Text>
+              <Text style={styles.gradeSubText}>{course.room || 'No Room Assigned'}</Text>
+              <Text style={styles.gradeSubText}>{course.currentterm}</Text>
+            </TouchableOpacity>
+          ))
+        ) : (
+          <Text style={styles.noAssignmentsText}>No grades available.</Text>
+        )}
+      </ScrollView>
+    </View>
+  );
+};
+
+const GradeDetailsModal = ({ visible, details, onClose }) => {
+  const [expandedType, setExpandedType] = useState(null);
+  if (!details || details.length === 0) return null;
+
+  const grouped = details.reduce((acc, a) => {
+    const type = a.AssignmentType || 'Other';
+    if (!acc[type]) acc[type] = [];
+    acc[type].push(a);
+    return acc;
+  }, {});
+
+  const toggleExpand = (type) => setExpandedType(expandedType === type ? null : type);
+  const cleanHtml = (str) => str?.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ') || '';
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={styles.gradeDetailsSafeArea}>
+        <View style={styles.gradeDetailsHeader}>
+          <TouchableOpacity onPress={onClose}><Text style={styles.gradeDetailsCloseButton}>Close</Text></TouchableOpacity>
+          <Text style={styles.gradeDetailsTitle}>Grade Details</Text>
+          <View style={{ width: 60 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.gradeDetailsScroll}>
+          {Object.entries(grouped).map(([type, items]) => {
+            const totalEarned = items.reduce((sum, a) => sum + (a.TotalPoints || 0), 0);
+            const totalMax = items.reduce((sum, a) => sum + (a.TotalMaxPoints || 0), 0);
+            const percentage = totalMax ? ((totalEarned / totalMax) * 100).toFixed(1) : 0;
+
+            return (
+              <View key={type} style={styles.gradeGroupContainer}>
+                <TouchableOpacity onPress={() => toggleExpand(type)}>
+                  <View style={styles.gradeGroupHeader}>
+                    <Text style={styles.gradeGroupTitle}>{type}</Text>
+                    <Text style={styles.gradeGroupPercent}>{percentage}%</Text>
+                  </View>
+                  <Text style={styles.gradeGroupInfo}>{items.length} total — {totalEarned} / {totalMax} points</Text>
+                </TouchableOpacity>
+                {expandedType === type && (
+                  <View style={styles.gradeAssignmentsList}>
+                    {items.map((a) => (
+                      <View key={a.AssignmentId} style={styles.assignmentRow}>
+                        <View style={styles.assignmentRowHeader}>
+                          <Text style={styles.assignmentRowTitle}>{a.Assignment || 'Untitled'}</Text>
+                          <Text style={styles.assignmentRowScore}>{a.Points}/{a.MaxPoints}</Text>
+                        </View>
+                        <Text style={styles.assignmentRowDesc}>{cleanHtml(a.AssignmentShortDescription)}</Text>
+                        {a.Comment ? <Text style={styles.assignmentRowComment}>{cleanHtml(a.Comment)}</Text> : null}
+                        <View style={styles.assignmentDivider}/>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+};
+
+const ResourcesPage = ({ onNavigateBack }) => {
+  const handleOpenLink = (url) => { Linking.openURL(url).catch(err => console.error("Couldn't load page", err)); };
   const ResourceItem = ({ label, url }) => (
-    <TouchableOpacity
-      style={styles.menuItem}
-      onPress={() => handleOpenLink(url)}
-    >
+    <TouchableOpacity style={styles.menuItem} onPress={() => handleOpenLink(url)}>
       <Text style={styles.menuItemText}>{label}</Text>
       <Text style={styles.menuItemArrow}>{'>'}</Text>
     </TouchableOpacity>
@@ -604,26 +808,17 @@ const ResourcesPage = ({ onNavigateBack }) => {
 
   return (
     <View style={[styles.pageContentContainer, styles.placeholderAlignment]}>
-      <Text style={styles.pageTitle}>Resources</Text>
+      <BackHeader title="Resources" onBack={onNavigateBack} />
       <View style={styles.menuList}>
-        <ResourceItem
-          label="Announcements"
-          url="https://www.canva.com/design/DAGOf_CuuSg/Lp8cITfl7i2Rfe4ehxPkwg/edit"
-        />
-        <ResourceItem
-          label="Lunch Menu"
-          url="https://www.sagedining.com/sites/miamicountryday/menu"
-        />
-        <ResourceItem
-          label="The Spartacus"
-          url="https://www.thespartacus.com"
-        />
+        <ResourceItem label="Announcements" url="https://www.canva.com/design/DAGOf_CuuSg/Lp8cITfl7i2Rfe4ehxPkwg/edit" />
+        <ResourceItem label="Lunch Menu" url="https://www.sagedining.com/sites/miamicountryday/menu" />
+        <ResourceItem label="The Spartacus" url="https://www.thespartacus.com" />
       </View>
     </View>
   );
 };
 
-const PlaceholderPage = ({ title }) => <View style={[styles.pageContentContainer, styles.placeholderAlignment]}><Text style={styles.pageTitle}>{title}</Text><Text style={styles.pageContentText}>This feature is coming soon.</Text></View>;
+const PlaceholderPage = ({ title, onNavigateBack }) => <View style={[styles.pageContentContainer, styles.placeholderAlignment]}><BackHeader title={title} onBack={onNavigateBack} /><Text style={styles.pageContentText}>This feature is coming soon.</Text></View>;
 const BottomNavBar = ({ activePage, onNavigate }) => {
   const Icon = ({ xml, color }) => <SvgXml xml={xml} width="28" height="28" fill={color} />;
   const NavButton = ({ name, iconXml }) => {
@@ -636,7 +831,6 @@ const BottomNavBar = ({ activePage, onNavigate }) => {
 
 // --- Styles ---
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' }, // Main wrapper for login
   appContainer: { flex: 1, backgroundColor: '#1C1C1E' }, // Main wrapper for the app
   webviewVisible: { flex: 1, backgroundColor: '#FFFFFF' },
   webviewHidden: { position: 'absolute', top: -10000, left: 0, width: 0, height: 0, zIndex: -1 },
@@ -714,6 +908,38 @@ const styles = StyleSheet.create({
   emailInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   emailText: { fontSize: 16, color: '#A0A0A0', textAlign: 'center', marginRight: 5, marginLeft: 10 },
   copyIcon: { tintColor: '#A0A0A0', marginLeft: 2 },
+  gradeCard: { backgroundColor: '#2C2C2E', borderRadius: 12, padding: 15, marginBottom: 15, width: '100%' },
+  gradeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
+  gradeTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', flex: 1, marginRight: 10 },
+  gradeValue: { color: '#34C759', fontSize: 18, fontWeight: 'bold' },
+  gradeSubText: { color: '#8E8E93', fontSize: 14 },
+  gpaContainer: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginBottom: 20 },
+  gpaBox: { flex: 1, backgroundColor: '#2C2C2E', padding: 15, borderRadius: 12, marginHorizontal: 5, alignItems: 'center' },
+  gpaLabel: { color: '#8E8E93', fontSize: 14, fontWeight: '600', marginBottom: 6 },
+  gpaValue: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold' },
+  gradeDetailsSafeArea: { flex: 1, backgroundColor: '#1C1C1E', paddingTop: 55 },
+  gradeDetailsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#2C2C2E' },
+  gradeDetailsTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', textAlign: 'center', flex: 1 },
+  gradeDetailsCloseButton: { color: '#007AFF', fontSize: 16, fontWeight: '600' },
+  gradeDetailsScroll: { padding: 20 },
+  gradeGroupContainer: { backgroundColor: '#2C2C2E', borderRadius: 12, padding: 15, marginBottom: 15 },
+  gradeGroupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  gradeGroupTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '600' },
+  gradeGroupPercent: { color: '#34C759', fontSize: 16, fontWeight: 'bold' },
+  gradeGroupInfo: { color: '#8E8E93', fontSize: 14, marginTop: 4 },
+  gradeAssignmentsList: { marginTop: 10 },
+  assignmentRow: { marginBottom: 10 },
+  assignmentRowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  assignmentRowTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '600', flex: 1, marginRight: 10 },
+  assignmentRowScore: { color: '#34C759', fontSize: 15, fontWeight: 'bold' },
+  assignmentRowDesc: { color: '#E5E5EA', fontSize: 14, marginTop: 4 },
+  assignmentRowComment: { color: '#8E8E93', fontSize: 13, fontStyle: 'italic', marginTop: 4 },
+  assignmentDivider: { height: 1, backgroundColor: '#3A3A3C', marginTop: 8 },
+  backHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
+  backButton: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  backArrow: { color: '#007AFF', fontSize: 28, marginRight: 4, paddingBottom: 4, },
+  backText: { color: '#007AFF', fontSize: 16, fontWeight: '600' },
+  backHeaderTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', textAlign: 'center', flex: 1 },
 });
 
 
