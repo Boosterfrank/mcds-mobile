@@ -38,9 +38,10 @@ const GRADES_API_URL = `${BASE_URL}/api/datadirect/ParentStudentUserClassesGet`;
 const GRADE_DETAILS_API_URL = `${BASE_URL}/api/gradebook/AssignmentPerformanceStudent`;
 const APP_HOME_URL_FRAGMENT = '/app/';
 
-const APP_VERSION = '1.7.1'; 
+const APP_VERSION = '1.7.2'; 
 
 const CHANGELOG_DATA = [
+    { version: '1.7.2', changes: ['Added preview mode'] },
     { version: '1.7.1', changes: ['Added Grades page', 'Added GPA calculator (Grades)', 'Added Back button', 'Fixed login crash'] },
     { version: '1.7.0', changes: ['Added UpdateCheck', 'Fixed assignment description not loading', 'Added pull down to refresh'] },
     { version: '1.6.9', changes: ['Added the Resources page for easy accses to announcements and more', 'Added more user info such as email and graduation year', 'Fixed assignments before last week not loading in', 'Added ability to copy email'] },
@@ -73,10 +74,12 @@ const App = () => {
   const [isChangelogVisible, setIsChangelogVisible] = useState(false);
   const [grades, setGrades] = useState(null);
   const [selectedCourseDetails, setSelectedCourseDetails] = useState(null);
+  const [previewMode, setPreviewMode] = useState(false);
   
   const webviewRef = useRef(null);
 
   const fetchApiInWebView = (url, type = 'GENERIC', options = {}) => {
+    if (previewMode) return;
     setIsLoading(true);
     const method = options.method || 'GET';
     const body = options.body ? JSON.stringify(options.body) : null;
@@ -234,6 +237,58 @@ const App = () => {
     checkForUpdate();
   }, []);
 
+  useEffect(() => {
+  if (previewMode) {
+    console.log('[PreviewMode] Activating Preview Data');
+    setUserInfo({
+      FirstName: 'User',
+      LastName: 'Preview',
+      Email: 'preview@mcds.edu',
+      StudentInfo: { GradYear: '2030' },
+    });
+
+    setAssignments({
+      DueToday: [
+        { 
+          AssignmentIndexId: 1, 
+          GroupName: 'Mathematics - H', 
+          ShortDescription: 'Algebra Worksheet', 
+          DateDue: '10/08/2025 11:59 PM', 
+          AssignmentStatusType: 0 
+        },
+      ],
+      PastThisWeek: [],
+      PastBeforeLastWeek: [],
+      PastLastWeek: [],
+      Overdue: [],
+      DueTomorrow: [],
+      DueThisWeek: [],
+      DueNextWeek: [],
+      DueAfterNextWeek: [],
+    });
+
+    setSchedule({
+      '10/07/2025': [
+        { 
+          CourseTitle: 'Preview Science', 
+          Contact: 'Dr. Smith', 
+          MyDayStartTime: '10:00 AM', 
+          MyDayEndTime: '11:00 AM', 
+          BuildingName: 'Science Center', 
+          RoomNumber: '201', 
+          Block: 'B' 
+        },
+      ]
+    });
+
+    setGrades([
+      { sectionidentifier: 'Biology - AP', cumgrade: 95, groupownername: 'Mr. Turner', room: 'Lab 1', currentterm: 'Q1', sectionid: 1, markingperiodid: 123 },
+      { sectionidentifier: 'Algebra II - H', cumgrade: 92, groupownername: 'Ms. Rivera', room: 'A103', currentterm: 'Q1', sectionid: 2, markingperiodid: 123 },
+    ]);
+  }
+}, [previewMode]);
+
+
   return (
     <View style={styles.appContainer}>
       <StatusBar barStyle={authStatus === 'LOGGED_IN' ? "light-content" : "dark-content"} />
@@ -245,8 +300,11 @@ const App = () => {
       <View style={authStatus === 'LOGGED_IN' ? styles.webviewHidden : styles.webviewVisible}>
         <SafeAreaView style={{flex: 1, backgroundColor: '#FFFFFF'}}>
             <View style={styles.loginHeader}>
-                <Text style={styles.loginTitle}>MCDS Mobile</Text>
-                {authStatus === 'LOGGED_OUT' && <Text style={styles.subtitle}>{loginReason}</Text>}
+              <Text style={styles.loginTitle}>MCDS Mobile</Text>
+              {authStatus === 'LOGGED_OUT' && <Text style={styles.subtitle}>{loginReason}</Text>}
+              <TouchableOpacity onPress={() => { setPreviewMode(true); setAuthStatus('LOGGED_IN'); }} style={styles.skipButton}>
+                <Text style={styles.skipText}>Skip</Text>
+              </TouchableOpacity>
             </View>
             <WebView
                 ref={webviewRef}
@@ -268,6 +326,15 @@ const App = () => {
             <View style={styles.appHeader}>
                 <Text style={styles.appTitle}>MCDS Mobile</Text>
             </View>
+
+            {previewMode && (
+              <View style={{ backgroundColor: '#FFD60A', padding: 6 }}>
+                <Text style={{ color: '#000', textAlign: 'center', fontWeight: '600' }}>
+                  Preview Mode — Data is shown not real
+                </Text>
+              </View>
+            )}
+
             <PageContent 
               activePage={activePage} 
               userInfo={userInfo} 
@@ -940,6 +1007,8 @@ const styles = StyleSheet.create({
   backArrow: { color: '#007AFF', fontSize: 28, marginRight: 4, paddingBottom: 4, },
   backText: { color: '#007AFF', fontSize: 16, fontWeight: '600' },
   backHeaderTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', textAlign: 'center', flex: 1 },
+  skipButton: { position: 'absolute', right: 20, top: 10, padding: 6 },
+  skipText: { color: '#007AFF', fontSize: 16, fontWeight: '600' },
 });
 
 
