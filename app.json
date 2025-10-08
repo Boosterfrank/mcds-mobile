@@ -9,7 +9,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "dev.quanticoic.mcdsmobile",
+      "bundleIdentifier": "dev.quanticoic.mcds",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
