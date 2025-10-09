@@ -19,6 +19,7 @@ import { SvgXml } from 'react-native-svg';
 import * as Clipboard from 'expo-clipboard';
 import moment from 'moment';
 import * as Linking from 'expo-linking';
+import FormattedText from './components/FormattedText';
 
 // --- SVG Icon Definitions ---
 const homeIconXml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8h5z"/></svg>`;
@@ -36,11 +37,13 @@ const ASSIGNMENT_DETAIL_API_URL = `${BASE_URL}/api/assignment2/UserAssignmentDet
 const SCHEDULE_API_URL = `${BASE_URL}/api/schedule/MyDayCalendarStudentList/`;
 const GRADES_API_URL = `${BASE_URL}/api/datadirect/ParentStudentUserClassesGet`;
 const GRADE_DETAILS_API_URL = `${BASE_URL}/api/gradebook/AssignmentPerformanceStudent`;
+const MESSAGES_API_URL = `${BASE_URL}/api/message/inbox/?format=json&pageNumber=1`;
 const APP_HOME_URL_FRAGMENT = '/app/';
 
-const APP_VERSION = '1.7.2'; 
+const APP_VERSION = '1.7.3'; 
 
 const CHANGELOG_DATA = [
+    { version: '1.7.3', changes: ['Added text Formatting and styling for descriptions, etc.'] },
     { version: '1.7.2', changes: ['Added preview mode'] },
     { version: '1.7.1', changes: ['Added Grades page', 'Added GPA calculator (Grades)', 'Added Back button', 'Fixed login crash'] },
     { version: '1.7.0', changes: ['Added UpdateCheck', 'Fixed assignment description not loading', 'Added pull down to refresh'] },
@@ -75,6 +78,9 @@ const App = () => {
   const [grades, setGrades] = useState(null);
   const [selectedCourseDetails, setSelectedCourseDetails] = useState(null);
   const [previewMode, setPreviewMode] = useState(false);
+  const [messages, setMessages] = useState(null);
+  const [selectedMessage, setSelectedMessage] = useState(null);
+
   
   const webviewRef = useRef(null);
 
@@ -149,13 +155,15 @@ const App = () => {
             }
         } else if (message.type === 'ASSIGNMENT_DETAIL') {
             setAssignmentDetails(prev => ({...prev, [responseData.AssignmentIndexId]: responseData}));
-
         }
         else if (message.type === 'GRADES') {
           setGrades(responseData);
         }
         else if (message.type === 'GRADE_DETAILS') {
           setSelectedCourseDetails(responseData);
+        }
+        else if (message.type === 'MESSAGES') {
+          setMessages(responseData);
         }
         setIsLoading(false);
       }
@@ -595,7 +603,7 @@ const AssignmentCenterPage = ({ assignments, fetchAssignments, updateStatus, isL
 const AssignmentCard = ({ assignment, onSelect }) => {
     const { status, color } = getStatusInfo(assignment.AssignmentStatusType);
     const cleanHtml = (str) => str?.replace(/<[^>]*>/g, '').replace(/&#160;/g, ' ') || '';
-    return (<TouchableOpacity onPress={onSelect} style={styles.assignmentCard}><View style={styles.assignmentHeader}><Text style={styles.assignmentClass} numberOfLines={1}>{assignment.GroupName}</Text><Text style={[styles.assignmentStatus, { color }]}>{status}</Text></View><Text style={styles.assignmentDesc}>{cleanHtml(assignment.ShortDescription)}</Text><Text style={styles.assignmentDue}>Due: {moment(assignment.DateDue, "M/D/YYYY h:mm A").format('ddd, MMM D [at] h:mm A')}</Text></TouchableOpacity>);
+    return (<TouchableOpacity onPress={onSelect} style={styles.assignmentCard}><View style={styles.assignmentHeader}><Text style={styles.assignmentClass} numberOfLines={1}>{assignment.GroupName}</Text><Text style={[styles.assignmentStatus, { color }]}>{status}</Text></View><Text style={styles.assignmentDesc}><FormattedText html={assignment.ShortDescription} /></Text><Text style={styles.assignmentDue}>Due: {moment(assignment.DateDue, "M/D/YYYY h:mm A").format('ddd, MMM D [at] h:mm A')}</Text></TouchableOpacity>);
 };
 
 const AssignmentDetailModal = ({ visible, assignment, details, isLoadingDetails, onClose, onStatusUpdate }) => {
@@ -616,14 +624,10 @@ const AssignmentDetailModal = ({ visible, assignment, details, isLoadingDetails,
                     <Text style={styles.modalDescription}>{cleanHtml(details?.ShortDescription)}</Text>
                     <Text style={styles.modalSectionTitle}>Description</Text>
                     {isLoadingDetails ? <ActivityIndicator color="#FFFFFF"/> :
-                      details?.LongDescription && details?.LongDescription === 1 ?
-                        <View>
-                          <Text style={styles.modalDescription}>{cleanHtml("No Description Provided")}</Text>
-                        </View> :
-                          <Text style={styles.modalDescription}>{cleanHtml(details?.LongDescription)}</Text>
+                      <FormattedText html={details?.LongDescription || "<i>No Description Provided</i>"} />
                     }
                     <View style={styles.modalSection}>
-                        <Text style={styles.modalSectionTitle}>Status</Text>
+                        <Text style={styles.modalSectionTitle} marginTop={20}>Status</Text>
                         <Text style={[styles.modalStatusText, { color }]}>{status}</Text>
                     </View>
 
@@ -848,8 +852,8 @@ const GradeDetailsModal = ({ visible, details, onClose }) => {
                           <Text style={styles.assignmentRowTitle}>{a.Assignment || 'Untitled'}</Text>
                           <Text style={styles.assignmentRowScore}>{a.Points}/{a.MaxPoints}</Text>
                         </View>
-                        <Text style={styles.assignmentRowDesc}>{cleanHtml(a.AssignmentShortDescription)}</Text>
-                        {a.Comment ? <Text style={styles.assignmentRowComment}>{cleanHtml(a.Comment)}</Text> : null}
+                          <FormattedText html={a.AssignmentShortDescription} />
+                          {a.Comment ? <FormattedText html={a.Comment} /> : null}
                         <View style={styles.assignmentDivider}/>
                       </View>
                     ))}
