@@ -212,6 +212,10 @@ const App = () => {
     fetchApiInWebView(url, 'GRADE_DETAILS');
   }, []);
 
+  const fetchMessagesCallback = useCallback(() => {
+    fetchApiInWebView(MESSAGES_API_URL, 'MESSAGES');
+  }, []);
+
   // --- Update check on app launch ---
   useEffect(() => {
     const compareVersions = (a, b) => {
@@ -356,8 +360,12 @@ const App = () => {
               isLoading={isLoading}
               assignmentDetails={assignmentDetails}
               fetchAssignmentDetails={fetchAssignmentDetailsCallback}
+              messages={messages}
+              fetchMessages={fetchMessagesCallback}
               onOpenChangelog={() => setIsChangelogVisible(true)}
               onNavigate={setActivePage}
+              selectedMessage={selectedMessage}
+              setSelectedMessage={setSelectedMessage}
             />
             <GradeDetailsModal
               visible={!!selectedCourseDetails}
@@ -386,7 +394,7 @@ const BackHeader = ({ title, onBack }) => (
 );
 
 // --- Page Content Wrapper with Transitions ---
-const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assignmentDetails, fetchAssignmentDetails, schedule, fetchSchedule, isLoading, onOpenChangelog, onNavigate, grades, fetchGrades, fetchGradeDetails }) => {
+const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assignmentDetails, fetchAssignmentDetails, schedule, fetchSchedule, isLoading, onOpenChangelog, onNavigate, grades, fetchGrades, fetchGradeDetails, messages, fetchMessages, selectedMessage, setSelectedMessage }) => {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     useEffect(() => {
         fadeAnim.setValue(0);
@@ -413,6 +421,18 @@ const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assi
               fetchGradeDetails={fetchGradeDetails} 
               isLoading={isLoading} 
             />
+          );
+        break;
+        case 'Messages':
+          currentPageComponent = (
+          <MessagesPage
+            messages={messages}
+            fetchMessages={fetchMessages}
+            selectedMessage={selectedMessage}
+            setSelectedMessage={setSelectedMessage}
+            isLoading={isLoading}
+            onNavigateBack={() => onNavigate('More')}
+          />
           );
         break;
         case 'Resources':
@@ -678,7 +698,7 @@ const MorePage = ({ onOpenChangelog, onNavigate }) => {
     <View style={[styles.pageContentContainer, styles.placeholderAlignment]}>
       <Text style={styles.pageTitle}>More</Text>
       <View style={styles.menuList}>
-        <MenuItem label="Messages" onPress={() => onNavigate('Messages')} />
+       <MenuItem label="Messages" onPress={() => onNavigate('Messages')} />
         <MenuItem label="Settings" onPress={() => onNavigate('Settings')} />
         <MenuItem label="Grades" onPress={() => onNavigate('Grades')} />
         <MenuItem label="Classes" onPress={() => onNavigate('Classes')} />
@@ -693,6 +713,7 @@ const MorePage = ({ onOpenChangelog, onNavigate }) => {
     </View>
   );
 };
+
 const ChangelogPage = ({ onClose }) => (
     <SafeAreaView style={styles.changelogContainer}>
         <View style={styles.changelogHeader}>
@@ -709,6 +730,101 @@ const ChangelogPage = ({ onClose }) => (
         </ScrollView>
     </SafeAreaView>
 );
+
+const MessagesPage = ({ messages, fetchMessages, isLoading, onNavigateBack, selectedMessage, setSelectedMessage }) => {
+  useEffect(() => {
+    if (!messages) fetchMessages();
+  }, []);
+
+  return (
+    <View style={styles.pageContentContainer}>
+      <BackHeader title="Messages" onBack={onNavigateBack} />
+
+      <ScrollView
+        style={{ width: '100%' }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={fetchMessages}
+            tintColor="#FFFFFF"
+          />
+        }
+      >
+        {isLoading && !messages ? (
+          <ActivityIndicator size="large" color="#FFFFFF" style={{ marginTop: 40 }} />
+        ) : messages && messages.length > 0 ? (
+          messages.map((msg, index) => {
+            const latest = msg.Messages[0];
+            const sender = latest.FromUser?.UserNameFormatted || 'Unknown';
+            const subject = msg.Subject || '(No Subject)';
+            const preview = latest.Body
+              ?.replace(/<[^>]+>/g, '')
+              ?.slice(0, 120)
+              ?.trim();
+
+            return (
+              <TouchableOpacity
+                key={index}
+                style={styles.messageCard}
+                onPress={() => setSelectedMessage(msg)}
+              >
+                <Text style={styles.messageSubject}>{subject}</Text>
+                <Text style={styles.messageSender}>{sender}</Text>
+                <Text style={styles.messagePreview}>{preview}...</Text>
+              </TouchableOpacity>
+            );
+          })
+        ) : (
+          <Text style={styles.noAssignmentsText}>No messages found.</Text>
+        )}
+      </ScrollView>
+
+      <MessageDetailModal
+        visible={!!selectedMessage}
+        message={selectedMessage}
+        onClose={() => setSelectedMessage(null)}
+      />
+    </View>
+  );
+};
+
+const MessageDetailModal = ({ visible, message, onClose }) => {
+  if (!message) return null;
+  const latest = message.Messages[0];
+  const sender = latest.FromUser?.UserNameFormatted || 'Unknown';
+  const photoUrl = `${BASE_URL}${latest.FromUser?.ProfilePhoto?.LargeFilenameEditedUrl}`;
+  const sendDate = latest.SendDate;
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={styles.gradeDetailsSafeArea}>
+        <View style={styles.gradeDetailsHeader}>
+          <TouchableOpacity onPress={onClose}>
+            <Text style={styles.gradeDetailsCloseButton}>Close</Text>
+          </TouchableOpacity>
+          <Text style={styles.gradeDetailsTitle}>Message</Text>
+          <View style={{ width: 60 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.gradeDetailsScroll}>
+          <View style={styles.messageHeader}>
+            <Image
+              source={{ uri: photoUrl }}
+              style={styles.messageAvatar}
+            />
+            <View>
+              <Text style={styles.messageSenderFull}>{sender}</Text>
+              <Text style={styles.messageDate}>{sendDate}</Text>
+            </View>
+          </View>
+
+          <Text style={styles.messageSubjectFull}>{message.Subject}</Text>
+          <FormattedText html={latest.Body} />
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+};
 
 const GradesPage = ({ userInfo, grades, fetchGrades, fetchGradeDetails, isLoading, onNavigateBack }) => {
   useEffect(() => {
@@ -1013,6 +1129,15 @@ const styles = StyleSheet.create({
   backHeaderTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', textAlign: 'center', flex: 1 },
   skipButton: { position: 'absolute', right: 20, top: 10, padding: 6 },
   skipText: { color: '#007AFF', fontSize: 16, fontWeight: '600' },
+  messageCard: { backgroundColor: '#2C2C2E', borderRadius: 12, padding: 15, marginBottom: 15, width: '100%', },
+  messageSubject: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  messageSender: { color: '#8E8E93', fontSize: 14, marginTop: 4 },
+  messagePreview: { color: '#E5E5EA', fontSize: 14, marginTop: 6 },
+  messageHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+  messageAvatar: { width: 50, height: 50, borderRadius: 25, marginRight: 12, backgroundColor: '#3A3A3C' },
+  messageSenderFull: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  messageDate: { color: '#8E8E93', fontSize: 13 },
+  messageSubjectFull: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
 });
 
 
