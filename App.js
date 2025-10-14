@@ -20,6 +20,17 @@ import * as Clipboard from 'expo-clipboard';
 import moment from 'moment';
 import * as Linking from 'expo-linking';
 import FormattedText from './components/FormattedText';
+import { db } from './firebaseConfig';
+import { 
+  collection, 
+  doc, 
+  getDoc,      // 👈 add this
+  setDoc, 
+  getDocs, 
+  query, 
+  orderBy, 
+  limit 
+} from 'firebase/firestore';
 
 // --- SVG Icon Definitions ---
 const homeIconXml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8h5z"/></svg>`;
@@ -40,9 +51,10 @@ const GRADE_DETAILS_API_URL = `${BASE_URL}/api/gradebook/AssignmentPerformanceSt
 const MESSAGES_API_URL = `${BASE_URL}/api/message/inbox/?format=json&pageNumber=1`;
 const APP_HOME_URL_FRAGMENT = '/app/';
 
-const APP_VERSION = '1.7.3'; 
+const APP_VERSION = '1.7.4'; 
 
 const CHANGELOG_DATA = [
+    { version: '1.7.4', changes: ['Added Messages Page', 'also added clicker game cuz I got bored and why not'] },
     { version: '1.7.3', changes: ['Added text Formatting and styling for descriptions, etc.'] },
     { version: '1.7.2', changes: ['Added preview mode'] },
     { version: '1.7.1', changes: ['Added Grades page', 'Added GPA calculator (Grades)', 'Added Back button', 'Fixed login crash'] },
@@ -183,13 +195,14 @@ const App = () => {
   }, [authStatus]);
   
   const fetchAssignmentsCallback = useCallback(() => {
-    if (!assignments) fetchApiInWebView(ASSIGNMENTS_API_URL, 'ASSIGNMENTS');
-  }, [assignments]);
+    fetchApiInWebView(ASSIGNMENTS_API_URL, 'ASSIGNMENTS');
+  }, []);
+
   
   const fetchScheduleCallback = useCallback((dateString) => {
       const url = `${SCHEDULE_API_URL}?scheduleDate=${encodeURIComponent(dateString)}&personaId=2`;
       if (!schedule[dateString]) fetchApiInWebView(url, 'SCHEDULE');
-  }, [schedule]);
+  }, []);
 
   const fetchAssignmentDetailsCallback = useCallback((assignmentIndexId) => {
     if (!userInfo) {
@@ -435,6 +448,12 @@ const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assi
           />
           );
         break;
+        case 'ClickGame':
+  currentPageComponent = (
+    <ClickGamePage userInfo={userInfo} onNavigateBack={() => onNavigate('More')} />
+  );
+  break;
+
         case 'Resources':
           currentPageComponent = (
             <ResourcesPage onNavigateBack={() => onNavigate('More')} />
@@ -539,7 +558,7 @@ const SchedulePage = ({ scheduleData, fetchSchedule, isLoading }) => {
     );
 };
 
-const AssignmentCenterPage = ({ assignments, fetchAssignments, updateStatus, isLoading, assignmentDetails, fetchAssignmentDetails }) => {
+const AssignmentCenterPage = ({ assignments, fetchAssignments, setAssignments, updateStatus, isLoading, assignmentDetails, fetchAssignmentDetails }) => {
     const [weekOffset, setWeekOffset] = useState(0);
     const [selectedAssignment, setSelectedAssignment] = useState(null);
 
@@ -600,7 +619,7 @@ const AssignmentCenterPage = ({ assignments, fetchAssignments, updateStatus, isL
               <RefreshControl
                 refreshing={isLoading}
                 onRefresh={fetchAssignments}
-                tintColor="#FFFFFF"
+                tintColor='#FFFFFF'
               />
             }
           >
@@ -703,6 +722,7 @@ const MorePage = ({ onOpenChangelog, onNavigate }) => {
         <MenuItem label="Grades" onPress={() => onNavigate('Grades')} />
         <MenuItem label="Classes" onPress={() => onNavigate('Classes')} />
         <MenuItem label="Resources" onPress={() => onNavigate('Resources')} />
+        <MenuItem label="Clicker" onPress={() => onNavigate('ClickGame')} />
       </View>
       <TouchableOpacity onLongPress={onOpenChangelog} delayLongPress={2000}>
         <View style={styles.versionInfo}>
@@ -756,6 +776,7 @@ const MessagesPage = ({ messages, fetchMessages, isLoading, onNavigateBack, sele
           messages.map((msg, index) => {
             const latest = msg.Messages[0];
             const sender = latest.FromUser?.UserNameFormatted || 'Unknown';
+            const isUnread = latest?.ReadInd === false;
             const subject = msg.Subject || '(No Subject)';
             const preview = latest.Body
               ?.replace(/<[^>]+>/g, '')
@@ -765,7 +786,10 @@ const MessagesPage = ({ messages, fetchMessages, isLoading, onNavigateBack, sele
             return (
               <TouchableOpacity
                 key={index}
-                style={styles.messageCard}
+                style={[
+                  styles.messageCard,
+                  isUnread && { backgroundColor: '#0A84FF22', borderLeftWidth: 3, borderLeftColor: '#0A84FF' },
+                ]}
                 onPress={() => setSelectedMessage(msg)}
               >
                 <Text style={styles.messageSubject}>{subject}</Text>
@@ -784,6 +808,158 @@ const MessagesPage = ({ messages, fetchMessages, isLoading, onNavigateBack, sele
         message={selectedMessage}
         onClose={() => setSelectedMessage(null)}
       />
+    </View>
+  );
+};
+
+
+const ClickGamePage = ({ onNavigateBack, userInfo }) => {
+  const [score, setScore] = useState(0);
+  const [floaters, setFloaters] = useState([]);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const animScale = useRef(new Animated.Value(1)).current;
+  const floaterId = useRef(0);
+
+  const nameKey = `${userInfo.FirstName} ${userInfo.LastName.charAt(0)}.`;
+
+  // --- Load saved score on mount ---
+  useEffect(() => {
+    const loadScore = async () => {
+      try {
+        const docRef = doc(db, "clickgame", nameKey);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setScore(data.clicks || 0);
+        } else {
+          // If user has no entry yet, create one with 0 clicks
+          await setDoc(docRef, { name: nameKey, clicks: 0 });
+          setScore(0);
+        }
+      } catch (error) {
+        console.error("Error loading score:", error);
+      }
+    };
+    loadScore();
+  }, []);
+
+  // --- Save score to Firestore ---
+  const saveScore = async (newScore) => {
+    try {
+      await setDoc(doc(db, "clickgame", nameKey), { name: nameKey, clicks: newScore });
+    } catch (error) {
+      console.error("Error saving score:", error);
+    }
+  };
+
+  // --- Fetch leaderboard ---
+  const fetchLeaderboard = async () => {
+    try {
+      setLoading(true);
+      const q = query(collection(db, "clickgame"), orderBy("clicks", "desc"), limit(10));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(doc => doc.data());
+      setLeaderboard(data);
+    } catch (error) {
+      console.error("Error loading leaderboard:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- Refresh leaderboard every 10 seconds ---
+  useEffect(() => {
+    fetchLeaderboard();
+    const interval = setInterval(fetchLeaderboard, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // --- Click handling + animation ---
+  const handleClick = async () => {
+    Animated.sequence([
+      Animated.timing(animScale, { toValue: 1.1, duration: 100, useNativeDriver: true }),
+      Animated.timing(animScale, { toValue: 1.0, duration: 100, useNativeDriver: true }),
+    ]).start();
+
+    setScore(prev => {
+      const newScore = prev + 1;
+      saveScore(newScore);
+      return newScore;
+    });
+
+    addFloater();
+  };
+
+const addFloater = () => {
+  const id = floaterId.current++;
+  const moveAnim = new Animated.Value(0);
+  const opacityAnim = new Animated.Value(1);
+
+  const maxX = 175;  
+  const minX = -175;
+  const maxY = 175;  
+  const minY = -175;
+
+  const xOffset = Math.random() * (maxX - minX) + minX;
+  const yOffset = Math.random() * (maxY - minY) + minY;
+
+  setFloaters(prev => [...prev, { id, moveAnim, opacityAnim, xOffset, yOffset }]);
+
+  Animated.parallel([
+    Animated.timing(moveAnim, { toValue: -60, duration: 1000, useNativeDriver: true }),
+    Animated.timing(opacityAnim, { toValue: 0, duration: 1000, useNativeDriver: true }),
+  ]).start(() => {
+    setFloaters(prev => prev.filter(f => f.id !== id));
+  });
+};
+
+
+  return (
+    <View style={[styles.pageContentContainer, { alignItems: 'center' }]}>
+      <BackHeader title="Clicker" onBack={onNavigateBack} />
+
+      <Animated.View style={[styles.clickCircleContainer, { transform: [{ scale: animScale }] }]}>
+        <TouchableOpacity onPress={handleClick} style={styles.clickButton} />
+      </Animated.View>
+
+      {/* Floating +1s around the circle */}
+      {floaters.map(f => (
+        <Animated.Text
+          key={f.id}
+          style={{
+            position: 'absolute',
+            color: '#FFFFFF',
+            fontSize: 22,
+            fontWeight: 'bold',
+            opacity: f.opacityAnim,
+            transform: [
+              { translateY: f.moveAnim },
+              { translateX: f.xOffset },
+              { translateY: f.yOffset + 200 },
+            ],
+          }}
+        >
+          +1
+        </Animated.Text>
+      ))}
+
+      <Text style={styles.clickScore}>{score}</Text>
+
+      <Text style={[styles.pageTitle, { fontSize: 24, marginTop: 30 }]}>Leaderboard</Text>
+      {loading ? (
+        <ActivityIndicator color="#FFFFFF" size="large" style={{ marginTop: 20 }} />
+      ) : (
+        <ScrollView style={{ width: '100%' }}>
+          {leaderboard.map((entry, index) => (
+            <View key={index} style={styles.leaderboardRow}>
+              <Text style={styles.leaderboardRank}>{index + 1}.</Text>
+              <Text style={styles.leaderboardName}>{entry.name}</Text>
+              <Text style={styles.leaderboardScore}>{entry.clicks}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      )}
     </View>
   );
 };
@@ -1138,7 +1314,14 @@ const styles = StyleSheet.create({
   messageSenderFull: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
   messageDate: { color: '#8E8E93', fontSize: 13 },
   messageSubjectFull: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
+  clickCircleContainer: { marginTop: 50, alignItems: 'center', justifyContent: 'center', width: '100%' },
+  clickButton: { width: 180, height: 180, borderRadius: 90, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center', },
+  clickText: { color: '#FFFFFF', fontSize: 26, fontWeight: 'bold' },
+  clickScore: { color: '#FFFFFF', fontSize: 24, marginTop: 40, fontWeight: '600', textAlign: 'center' },
+  leaderboardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderColor: '#1E1E1E' },
+  leaderboardRank: { color: '#888', fontSize: 18, width: 30, textAlign: 'left' },
+  leaderboardName: { color: '#FFFFFF', fontSize: 18, flex: 1 },
+  leaderboardScore: { color: '#00A8FF', fontSize: 18, fontWeight: '600', width: 60, textAlign: 'right' },
 });
-
 
 export default AppWrapper;
