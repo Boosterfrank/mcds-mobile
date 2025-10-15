@@ -19,6 +19,7 @@ import { SvgXml } from 'react-native-svg';
 import * as Clipboard from 'expo-clipboard';
 import moment from 'moment';
 import * as Linking from 'expo-linking';
+import * as Haptics from 'expo-haptics';
 import FormattedText from './components/FormattedText';
 import { db } from './firebaseConfig';
 import { collection, doc, getDoc, setDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
@@ -868,6 +869,9 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
 
   // --- Click handling + animation ---
   const handleClick = async () => {
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
     Animated.sequence([
       Animated.timing(animScale, { toValue: 1.1, duration: 100, useNativeDriver: true }),
       Animated.timing(animScale, { toValue: 1.0, duration: 100, useNativeDriver: true }),
