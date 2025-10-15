@@ -18,6 +18,7 @@ import { WebView } from 'react-native-webview';
 import { SvgXml } from 'react-native-svg';
 import * as Clipboard from 'expo-clipboard';
 import moment from 'moment';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import * as Haptics from 'expo-haptics';
 import FormattedText from './components/FormattedText';
@@ -43,9 +44,10 @@ const GRADE_DETAILS_API_URL = `${BASE_URL}/api/gradebook/AssignmentPerformanceSt
 const MESSAGES_API_URL = `${BASE_URL}/api/message/inbox/?format=json&pageNumber=1`;
 const APP_HOME_URL_FRAGMENT = '/app/';
 
-const APP_VERSION = '1.7.4'; 
+const APP_VERSION = '1.7.5'; 
 
 const CHANGELOG_DATA = [
+    { version: '1.7.5', changes: ['fixed score not saving correctly','fixed webview offset'] },
     { version: '1.7.4', changes: ['Added Messages Page', 'also added clicker game cuz I got bored and why not'] },
     { version: '1.7.3', changes: ['Added text Formatting and styling for descriptions, etc.'] },
     { version: '1.7.2', changes: ['Added preview mode'] },
@@ -815,19 +817,29 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
 
   const nameKey = `${userInfo.FirstName} ${userInfo.LastName.charAt(0)}.`;
 
-  // --- Load saved score on mount ---
+  // --- Load saved score (local first, then Firestore) ---
   useEffect(() => {
     const loadScore = async () => {
       try {
+        // Try local first
+        const storedScore = await AsyncStorage.getItem(`clickgame_${nameKey}`);
+        if (storedScore !== null) {
+          setScore(parseInt(storedScore));
+        }
+
+        // Then try Firestore
         const docRef = doc(db, "clickgame", nameKey);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
           setScore(data.clicks || 0);
+
+          // Sync to local
+          await AsyncStorage.setItem(`clickgame_${nameKey}`, String(data.clicks || 0));
         } else {
-          // If user has no entry yet, create one with 0 clicks
+          // Create if missing
           await setDoc(docRef, { name: nameKey, clicks: 0 });
-          setScore(0);
+          await AsyncStorage.setItem(`clickgame_${nameKey}`, "0");
         }
       } catch (error) {
         console.error("Error loading score:", error);
@@ -835,15 +847,6 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
     };
     loadScore();
   }, []);
-
-  // --- Save score to Firestore ---
-  const saveScore = async (newScore) => {
-    try {
-      await setDoc(doc(db, "clickgame", nameKey), { name: nameKey, clicks: newScore });
-    } catch (error) {
-      console.error("Error saving score:", error);
-    }
-  };
 
   // --- Fetch leaderboard ---
   const fetchLeaderboard = async () => {
@@ -857,6 +860,19 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
       console.error("Error loading leaderboard:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+    // --- Save score to Firestore ---
+  const saveScore = async (newScore) => {
+    try {
+      // Save locally first (instant)
+      await AsyncStorage.setItem(`clickgame_${nameKey}`, String(newScore));
+
+      // Then try to sync online
+      await setDoc(doc(db, "clickgame", nameKey), { name: nameKey, clicks: newScore });
+    } catch (error) {
+      console.error("Error saving score:", error);
     }
   };
 
