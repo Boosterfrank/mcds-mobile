@@ -11,6 +11,7 @@ import {
   ScrollView,
   Alert,
   RefreshControl,
+  TextInput,
   Modal
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -31,6 +32,7 @@ const assignmentsIconXml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
 const scheduleIconXml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM9 14H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zm-8 4H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z"/></svg>`;
 const menuIconXml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>`;
 const CopyIconXml = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <g id="Edit / Copy"> <path id="Vector" d="M9 9V6.2002C9 5.08009 9 4.51962 9.21799 4.0918C9.40973 3.71547 9.71547 3.40973 10.0918 3.21799C10.5196 3 11.0801 3 12.2002 3H17.8002C18.9203 3 19.4801 3 19.9079 3.21799C20.2842 3.40973 20.5905 3.71547 20.7822 4.0918C21.0002 4.51962 21.0002 5.07967 21.0002 6.19978V11.7998C21.0002 12.9199 21.0002 13.48 20.7822 13.9078C20.5905 14.2841 20.2839 14.5905 19.9076 14.7822C19.4802 15 18.921 15 17.8031 15H15M9 9H6.2002C5.08009 9 4.51962 9 4.0918 9.21799C3.71547 9.40973 3.40973 9.71547 3.21799 10.0918C3 10.5196 3 11.0801 3 12.2002V17.8002C3 18.9203 3 19.4801 3.21799 19.9079C3.40973 20.2842 3.71547 20.5905 4.0918 20.7822C4.5192 21 5.07899 21 6.19691 21H11.8036C12.9215 21 13.4805 21 13.9079 20.7822C14.2842 20.5905 14.5905 20.2839 14.7822 19.9076C15 19.4802 15 18.921 15 17.8031V15M9 9H11.8002C12.9203 9 13.4801 9 13.9079 9.21799C14.2842 9.40973 14.5905 9.71547 14.7822 10.0918C15 10.5192 15 11.079 15 12.1969L15 15" stroke="#A0A0A0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path> </g> </g></svg>`;
+const shopIconXml = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path fill="#FFFFFF" d="M48,24h16V4c0-2.211-1.789-4-4-4H48V24z"/><rect x="24" fill="#FFFFFF" width="16" height="24"/><path fill="#FFFFFF" d="M16,24V0H4C1.789,0,0,1.789,0,4v20H16z"/><path fill="#FFFFFF" d="M4,32v28c0,2.211,1.789,4,4,4h16V44h16v20h16c2.211,0,4-1.789,4-4V32H4z"/></svg>`;
 
 // --- Configuration ---
 const BASE_URL = 'https://miamicountryday.myschoolapp.com';
@@ -44,9 +46,10 @@ const GRADE_DETAILS_API_URL = `${BASE_URL}/api/gradebook/AssignmentPerformanceSt
 const MESSAGES_API_URL = `${BASE_URL}/api/message/inbox/?format=json&pageNumber=1`;
 const APP_HOME_URL_FRAGMENT = '/app/';
 
-const APP_VERSION = '1.7.5'; 
+const APP_VERSION = '1.7.6'; 
 
 const CHANGELOG_DATA = [
+    { version: '1.7.5', changes: ['added shop for clicker','added useless tips'] },
     { version: '1.7.5', changes: ['fixed score not saving correctly','fixed webview offset'] },
     { version: '1.7.4', changes: ['Added Messages Page', 'also added clicker game cuz I got bored and why not'] },
     { version: '1.7.3', changes: ['Added text Formatting and styling for descriptions, etc.'] },
@@ -806,136 +809,225 @@ const MessagesPage = ({ messages, fetchMessages, isLoading, onNavigateBack, sele
   );
 };
 
-
 const ClickGamePage = ({ onNavigateBack, userInfo }) => {
   const [score, setScore] = useState(0);
   const [floaters, setFloaters] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [shopVisible, setShopVisible] = useState(false);
+  const [clickMultiplier, setClickMultiplier] = useState(1);
+  const [devPanelVisible, setDevPanelVisible] = useState(false);
+  const [devMultiplier, setDevMultiplier] = useState('');
+  const [devScore, setDevScore] = useState('');
+  const [devLeaderboardEdit, setDevLeaderboardEdit] = useState({ name: '', clicks: '' })
   const animScale = useRef(new Animated.Value(1)).current;
   const floaterId = useRef(0);
+  const [tipText, setTipText] = useState('');
+  const tipIndex = useRef(0);
+  const typingTimeout = useRef(null);
+  const tipList = [
+    "Tip: If you click the big blue circle you get a dopamine hit to your brain",
+    "Tip: Rebirths reset your clicks but multiply clicks x2",
+    "Tip: You should beat the top score",
+    "Tip: Click faster!",
+    "Tip: 6-7",
+    "Tip: If you jump in real life you get clicks",
+    "Tip: Offline progress saves automatically now",
+    "Tip: He is behind you...",
+    "Tip: Did you know there is a secret page in the app?",
+  ];
+
 
   const nameKey = `${userInfo.FirstName} ${userInfo.LastName.charAt(0)}.`;
 
-  // --- Load saved score (local first, then Firestore) ---
+  // Format numbers with commas
+  const formatNumber = (num) => num.toLocaleString();
+
+  // --- Define rebirth stages ---
+  const rebirthStages = [
+    { cost: 100000, multiplier: 2 },
+    { cost: 300000, multiplier: 4 },
+    { cost: 600000, multiplier: 8 },
+    { cost: 1000000, multiplier: 16 },
+  ];
+
+  const getNextRebirth = () => {
+    const currentIndex = rebirthStages.findIndex((stage) => stage.multiplier === clickMultiplier * 2);
+    const nextStage = rebirthStages.find((s) => s.multiplier > clickMultiplier);
+    return nextStage || null;
+  };
+
+  const typeWriter = (fullText, i = 0) => {
+    if (i <= fullText.length) {
+      setTipText(fullText.substring(0, i));
+      typingTimeout.current = setTimeout(() => typeWriter(fullText, i + 1), 40);
+    }
+  };
+
   useEffect(() => {
-    const loadScore = async () => {
+    const showNextTip = () => {
+      clearTimeout(typingTimeout.current);
+      const current = tipList[tipIndex.current];
+      typeWriter(current);
+      tipIndex.current = (tipIndex.current + 1) % tipList.length;
+    };
+
+    showNextTip();
+    const interval = setInterval(showNextTip, 20000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(typingTimeout.current);
+    };
+  }, []);
+
+  // --- Load score + multiplier from storage ---
+  useEffect(() => {
+    const loadData = async () => {
       try {
-        // Try local first
         const storedScore = await AsyncStorage.getItem(`clickgame_${nameKey}`);
-        if (storedScore !== null) {
-          setScore(parseInt(storedScore));
+        if (storedScore !== null) setScore(parseInt(storedScore));
+
+        const storedMultiplier = await AsyncStorage.getItem(`clickgame_multiplier_${nameKey}`);
+        if (storedMultiplier) setClickMultiplier(parseInt(storedMultiplier));
+        else {
+          await AsyncStorage.setItem(`clickgame_multiplier_${nameKey}`, '1');
+          setClickMultiplier(1);
         }
 
-        // Then try Firestore
-        const docRef = doc(db, "clickgame", nameKey);
+        const docRef = doc(db, 'clickgame', nameKey);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
           setScore(data.clicks || 0);
-
-          // Sync to local
           await AsyncStorage.setItem(`clickgame_${nameKey}`, String(data.clicks || 0));
         } else {
-          // Create if missing
           await setDoc(docRef, { name: nameKey, clicks: 0 });
-          await AsyncStorage.setItem(`clickgame_${nameKey}`, "0");
+          await AsyncStorage.setItem(`clickgame_${nameKey}`, '0');
         }
       } catch (error) {
-        console.error("Error loading score:", error);
+        console.error('Error loading data:', error);
       }
     };
-    loadScore();
+    loadData();
   }, []);
 
-  // --- Fetch leaderboard ---
+  // save score to Firestore
+  const saveScore = async (newScore) => {
+    try {
+      await AsyncStorage.setItem(`clickgame_${nameKey}`, String(newScore));
+      await setDoc(doc(db, 'clickgame', nameKey), { name: nameKey, clicks: newScore });
+    } catch (error) {
+      console.error('Error saving score:', error);
+    }
+  };
+
+  // Fetch leaderboard
   const fetchLeaderboard = async () => {
     try {
       setLoading(true);
-      const q = query(collection(db, "clickgame"), orderBy("clicks", "desc"), limit(10));
+      const q = query(collection(db, 'clickgame'), orderBy('clicks', 'desc'), limit(10));
       const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => doc.data());
+      const data = snapshot.docs.map((doc) => doc.data());
       setLeaderboard(data);
     } catch (error) {
-      console.error("Error loading leaderboard:", error);
+      console.error('Error loading leaderboard:', error);
     } finally {
       setLoading(false);
     }
   };
 
-    // --- Save score to Firestore ---
-  const saveScore = async (newScore) => {
-    try {
-      // Save locally first (instant)
-      await AsyncStorage.setItem(`clickgame_${nameKey}`, String(newScore));
-
-      // Then try to sync online
-      await setDoc(doc(db, "clickgame", nameKey), { name: nameKey, clicks: newScore });
-    } catch (error) {
-      console.error("Error saving score:", error);
-    }
-  };
-
-  // --- Refresh leaderboard every 10 seconds ---
   useEffect(() => {
     fetchLeaderboard();
     const interval = setInterval(fetchLeaderboard, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  // --- Click handling + animation ---
+  // --- Handle click ---
   const handleClick = async () => {
-
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
     Animated.sequence([
       Animated.timing(animScale, { toValue: 1.1, duration: 100, useNativeDriver: true }),
       Animated.timing(animScale, { toValue: 1.0, duration: 100, useNativeDriver: true }),
     ]).start();
 
-    setScore(prev => {
-      const newScore = prev + 1;
+    setScore((prev) => {
+      const newScore = prev + clickMultiplier;
       saveScore(newScore);
       return newScore;
     });
-
     addFloater();
   };
 
-const addFloater = () => {
-  const id = floaterId.current++;
-  const moveAnim = new Animated.Value(0);
-  const opacityAnim = new Animated.Value(1);
+  // --- Floating +X animation ---
+  const addFloater = () => {
+    const id = floaterId.current++;
+    const moveAnim = new Animated.Value(0);
+    const opacityAnim = new Animated.Value(1);
 
-  const maxX = 175;  
-  const minX = -175;
-  const maxY = 175;  
-  const minY = -175;
+    const maxX = 175, minX = -175, maxY = 175, minY = -175;
+    const xOffset = Math.random() * (maxX - minX) + minX;
+    const yOffset = Math.random() * (maxY - minY) + minY;
 
-  const xOffset = Math.random() * (maxX - minX) + minX;
-  const yOffset = Math.random() * (maxY - minY) + minY;
+    setFloaters((prev) => [...prev, { id, moveAnim, opacityAnim, xOffset, yOffset }]);
 
-  setFloaters(prev => [...prev, { id, moveAnim, opacityAnim, xOffset, yOffset }]);
+    Animated.parallel([
+      Animated.timing(moveAnim, { toValue: -60, duration: 1000, useNativeDriver: true }),
+      Animated.timing(opacityAnim, { toValue: 0, duration: 1000, useNativeDriver: true }),
+    ]).start(() => setFloaters((prev) => prev.filter((f) => f.id !== id)));
+  };
 
-  Animated.parallel([
-    Animated.timing(moveAnim, { toValue: -60, duration: 1000, useNativeDriver: true }),
-    Animated.timing(opacityAnim, { toValue: 0, duration: 1000, useNativeDriver: true }),
-  ]).start(() => {
-    setFloaters(prev => prev.filter(f => f.id !== id));
-  });
-};
+  // --- Handle rebirth (dynamic single button) ---
+  const handleRebirth = async () => {
+    const nextStage = getNextRebirth();
+    if (!nextStage) {
+      Alert.alert('Maxed Out!', 'You have reached the final 16× stage!');
+      return;
+    }
 
+    if (score >= nextStage.cost) {
+      const newMultiplier = nextStage.multiplier;
+      await AsyncStorage.setItem(`clickgame_multiplier_${nameKey}`, String(newMultiplier));
+      await AsyncStorage.setItem(`clickgame_${nameKey}`, '0');
+      await setDoc(doc(db, 'clickgame', nameKey), { name: nameKey, clicks: 0 });
+      setClickMultiplier(newMultiplier);
+      setScore(0);
+      saveScore(0);
+      Alert.alert('Rebirth Complete!', `Click value increased to x${newMultiplier}`);
+      setShopVisible(false);
+    } else {
+      Alert.alert('Not Enough Clicks', `You need ${formatNumber(nextStage.cost)} clicks to rebirth!`);
+    }
+  };
+
+  const nextStage = getNextRebirth();
 
   return (
     <View style={[styles.pageContentContainer, { alignItems: 'center' }]}>
-      <BackHeader title="Clicker" onBack={onNavigateBack} />
+      <View style={styles.clickerHeader}>
+        <TouchableOpacity onPress={onNavigateBack} style={styles.backButtonInline}>
+          <Text style={styles.backArrow}>{'‹ Back'}</Text>
+        </TouchableOpacity>
+        <Text style={styles.clickerTitle}>Clicker</Text>
+        <TouchableOpacity onPress={() => setShopVisible(true)} style={styles.shopButton}>
+          <SvgXml xml={shopIconXml} width={26} height={26} />
+        </TouchableOpacity>
+      </View>
+      <Text style={{ color: '#B0B0B0', fontSize: 16, marginVertical: 10, textAlign: 'center' }}>
+        {tipText}
+      </Text>
 
       <Animated.View style={[styles.clickCircleContainer, { transform: [{ scale: animScale }] }]}>
-        <TouchableOpacity onPress={handleClick} style={styles.clickButton} />
+        <TouchableOpacity
+          onPress={handleClick}
+          onLongPress={() => {
+            if (nameKey === 'Franco B.') setDevPanelVisible(true);
+          }}
+          delayLongPress={2000}
+          style={styles.clickButton}
+        />
       </Animated.View>
 
-      {/* Floating +1s around the circle */}
-      {floaters.map(f => (
+      {floaters.map((f) => (
         <Animated.Text
           key={f.id}
           style={{
@@ -951,11 +1043,12 @@ const addFloater = () => {
             ],
           }}
         >
-          +1
+          +{clickMultiplier}
         </Animated.Text>
       ))}
 
-      <Text style={styles.clickScore}>{score}</Text>
+      <Text style={styles.clickScore}>{formatNumber(score)}</Text>
+      <Text style={{ color: '#8E8E93', fontSize: 16, marginTop: 6 }}>Multiplier: x{clickMultiplier}</Text>
 
       <Text style={[styles.pageTitle, { fontSize: 24, marginTop: 30 }]}>Leaderboard</Text>
       {loading ? (
@@ -966,14 +1059,137 @@ const addFloater = () => {
             <View key={index} style={styles.leaderboardRow}>
               <Text style={styles.leaderboardRank}>{index + 1}.</Text>
               <Text style={styles.leaderboardName}>{entry.name}</Text>
-              <Text style={styles.leaderboardScore}>{entry.clicks}</Text>
+              <Text style={styles.leaderboardScore}>{formatNumber(entry.clicks)}</Text>
             </View>
           ))}
         </ScrollView>
       )}
+
+      {/* Shop Modal */}
+      <Modal visible={shopVisible} animationType="fade" transparent={true} onRequestClose={() => setShopVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.shopContainer}>
+            <Text style={styles.shopTitle}>Shop</Text>
+            <Text style={styles.shopSubtitle}>Rebirth to increase click multiplier</Text>
+
+            {nextStage ? (
+              <TouchableOpacity
+                style={[styles.upgradeButton, score < nextStage.cost && { opacity: 0.5 }]}
+                onPress={handleRebirth}
+              >
+                <Text style={styles.upgradeText}>
+                  ♾️ Rebirth for {formatNumber(nextStage.cost)} → x{nextStage.multiplier}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={{ color: '#8E8E93', fontSize: 16, marginVertical: 10 }}>You’ve reached the max rebirth!</Text>
+            )}
+
+            <TouchableOpacity onPress={() => setShopVisible(false)} style={styles.closeButton}>
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      {/* Developer Panel (hidden) */}
+      <Modal
+        visible={devPanelVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setDevPanelVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.shopContainer}>
+            <Text style={styles.shopTitle}>Developer Panel</Text>
+
+            {/* Multiplier Editor */}
+            <Text style={styles.shopSubtitle}>Set Click Multiplier</Text>
+            <TextInput
+              value={devMultiplier}
+              onChangeText={setDevMultiplier}
+              keyboardType="numeric"
+              placeholder={`Current: ${clickMultiplier}`}
+              placeholderTextColor="#888"
+              style={styles.devInput}
+            />
+            <TouchableOpacity
+              style={styles.upgradeButton}
+              onPress={async () => {
+                const newVal = parseInt(devMultiplier);
+                if (!isNaN(newVal)) {
+                  setClickMultiplier(newVal);
+                  await AsyncStorage.setItem(`clickgame_multiplier_${nameKey}`, String(newVal));
+                  Alert.alert('Multiplier updated!', `Now x${newVal}`);
+                }
+              }}
+            >
+              <Text style={styles.upgradeText}>Apply Multiplier</Text>
+            </TouchableOpacity>
+
+            {/* Score Editor */}
+            <Text style={styles.shopSubtitle}>Set Your Score</Text>
+            <TextInput
+              value={devScore}
+              onChangeText={setDevScore}
+              keyboardType="numeric"
+              placeholder={`Current: ${score}`}
+              placeholderTextColor="#888"
+              style={styles.devInput}
+            />
+            <TouchableOpacity
+              style={styles.upgradeButton}
+              onPress={async () => {
+                const newScore = parseInt(devScore);
+                if (!isNaN(newScore)) {
+                  setScore(newScore);
+                  saveScore(newScore);
+                  Alert.alert('Score updated!', `Now ${newScore.toLocaleString()} clicks`);
+                }
+              }}
+            >
+              <Text style={styles.upgradeText}>Apply Score</Text>
+            </TouchableOpacity>
+
+            {/* Leaderboard Editor */}
+            <Text style={styles.shopSubtitle}>Edit Leaderboard Entry</Text>
+            <TextInput
+              value={devLeaderboardEdit.name}
+              onChangeText={(t) => setDevLeaderboardEdit({ ...devLeaderboardEdit, name: t })}
+              placeholder="Name (e.g. Franco B.)"
+              placeholderTextColor="#888"
+              style={styles.devInput}
+            />
+            <TextInput
+              value={devLeaderboardEdit.clicks}
+              onChangeText={(t) => setDevLeaderboardEdit({ ...devLeaderboardEdit, clicks: t })}
+              keyboardType="numeric"
+              placeholder="New Clicks"
+              placeholderTextColor="#888"
+              style={styles.devInput}
+            />
+            <TouchableOpacity
+              style={styles.upgradeButton}
+              onPress={async () => {
+                const { name, clicks } = devLeaderboardEdit;
+                if (name && clicks) {
+                  await setDoc(doc(db, 'clickgame', name), { name, clicks: parseInt(clicks) });
+                  fetchLeaderboard();
+                  Alert.alert('Leaderboard updated!', `${name}: ${parseInt(clicks).toLocaleString()} clicks`);
+                }
+              }}
+            >
+              <Text style={styles.upgradeText}>Apply Leaderboard Edit</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => setDevPanelVisible(false)} style={styles.closeButton}>
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
-};
+}
 
 const MessageDetailModal = ({ visible, message, onClose }) => {
   if (!message) return null;
@@ -1309,9 +1525,9 @@ const styles = StyleSheet.create({
   assignmentRowDesc: { color: '#E5E5EA', fontSize: 14, marginTop: 4 },
   assignmentRowComment: { color: '#8E8E93', fontSize: 13, fontStyle: 'italic', marginTop: 4 },
   assignmentDivider: { height: 1, backgroundColor: '#3A3A3C', marginTop: 8 },
-  backHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
+  backHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 20 },
   backButton: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-  backArrow: { color: '#007AFF', fontSize: 28, marginRight: 4, paddingBottom: 4, },
+  backArrow: { color: '#007AFF', fontSize: 18, fontWeight: '600' },
   backText: { color: '#007AFF', fontSize: 16, fontWeight: '600' },
   backHeaderTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', textAlign: 'center', flex: 1 },
   skipButton: { position: 'absolute', right: 20, top: 10, padding: 6 },
@@ -1332,7 +1548,19 @@ const styles = StyleSheet.create({
   leaderboardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderColor: '#1E1E1E' },
   leaderboardRank: { color: '#888', fontSize: 18, width: 30, textAlign: 'left' },
   leaderboardName: { color: '#FFFFFF', fontSize: 18, flex: 1 },
-  leaderboardScore: { color: '#00A8FF', fontSize: 18, fontWeight: '600', width: 60, textAlign: 'right' },
+  leaderboardScore: { color: '#00A8FF', fontSize: 18, fontWeight: '600', textAlign: 'right' },
+  clickerHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',width:'100%',marginHorizontal:20, marginTop:10 ,paddingRight:50},
+  clickerTitle:{color:'#FFFFFF',fontSize:24,fontWeight:'bold',textAlign:'center',flex:1},
+  backButtonInline:{padding:10},
+  shopButton:{},
+  shopContainer:{backgroundColor:'#2C2C2E',margin:30,borderRadius:16,padding:20,alignItems:'center'},
+  shopTitle:{color:'#FFFFFF',fontSize:24,fontWeight:'bold',marginBottom:6},
+  shopSubtitle:{color:'#A0A0A0',fontSize:14,marginBottom:20},
+  upgradeButton:{backgroundColor:'#007AFF',borderRadius:12,padding:15,marginBottom:15,width:'100%',alignItems:'center'},
+  upgradeText:{color:'#FFFFFF',fontSize:16,fontWeight:'600'},
+  floaterText:{color:'#FFFFFF',fontSize:22,fontWeight:'bold',position:'absolute'},
+  devInput: { backgroundColor: '#2C2C2E', color: '#FFF', borderRadius: 8, padding: 10, width: '100%', marginVertical: 6, fontSize: 16, },
+
 });
 
 export default AppWrapper;

@@ -2,7 +2,7 @@
   "expo": {
     "name": "MCDS",
     "slug": "mcds-mobile",
-    "version": "1.7.5",
+    "version": "1.7.6",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -10,6 +10,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "dev.quanticoic.mcds",
+      "icon": {
+        "light": "./assets/icon.png",
+        "dark": "./assets/ios-dark.png",
+        "tinted": "./assets/ios-tinted.png"
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
