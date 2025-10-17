@@ -20,8 +20,7 @@ module.exports = ({ config }) => {
       // iOS icon appearances
       icon: {
         light: "./assets/icon.png",
-        dark: "./assets/ios-dark.png",
-        tinted: "./assets/ios-tinted.png"
+        dark: "./assets/ios-dark.png"
       },
 
       infoPlist: {
