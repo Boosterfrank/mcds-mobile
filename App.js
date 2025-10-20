@@ -55,7 +55,7 @@ const APP_HOME_URL_FRAGMENT = '/app/';
 const APP_VERSION = '1.7.6'; 
 
 const CHANGELOG_DATA = [
-    { version: '1.7.6', changes: ['Fixed cicker saving too much', 'Added custom app backgrounds'] },
+    { version: '1.7.6', changes: ['Fixed cicker saving too much', 'Added custom app backgrounds', 'Added dark/tinted icons'] },
     { version: '1.7.5', changes: ['Added shop for clicker','added useless tips'] },
     { version: '1.7.5', changes: ['Fixed score not saving correctly','fixed webview offset'] },
     { version: '1.7.4', changes: ['Added Messages Page', 'also added clicker game cuz I got bored and why not'] },
