@@ -11,17 +11,23 @@ import {
   ScrollView,
   Alert,
   RefreshControl,
+  ImageBackground,
   TextInput,
-  Modal
+  Modal,
+  Dimensions
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { SvgXml } from 'react-native-svg';
 import * as Clipboard from 'expo-clipboard';
 import moment from 'moment';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Slider from '@react-native-community/slider';
 import * as Linking from 'expo-linking';
 import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
 import FormattedText from './components/FormattedText';
 import { db } from './firebaseConfig';
 import { collection, doc, getDoc, setDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
@@ -49,9 +55,9 @@ const APP_HOME_URL_FRAGMENT = '/app/';
 const APP_VERSION = '1.7.6'; 
 
 const CHANGELOG_DATA = [
-    { version: '1.7.6', changes: ['fixed cicker saving too much'] },
-    { version: '1.7.5', changes: ['added shop for clicker','added useless tips'] },
-    { version: '1.7.5', changes: ['fixed score not saving correctly','fixed webview offset'] },
+    { version: '1.7.6', changes: ['Fixed cicker saving too much', 'Added custom app backgrounds'] },
+    { version: '1.7.5', changes: ['Added shop for clicker','added useless tips'] },
+    { version: '1.7.5', changes: ['Fixed score not saving correctly','fixed webview offset'] },
     { version: '1.7.4', changes: ['Added Messages Page', 'also added clicker game cuz I got bored and why not'] },
     { version: '1.7.3', changes: ['Added text Formatting and styling for descriptions, etc.'] },
     { version: '1.7.2', changes: ['Added preview mode'] },
@@ -90,8 +96,18 @@ const App = () => {
   const [previewMode, setPreviewMode] = useState(false);
   const [messages, setMessages] = useState(null);
   const [selectedMessage, setSelectedMessage] = useState(null);
+  const [backgroundUri, setBackgroundUri] = useState(null);
+  const [blurAmount, setBlurAmount] = useState(0);
+  const [showTips, setShowTips] = useState(true);
 
-  
+  useEffect(() => {
+    const loadSettings = async () => {
+      const savedTips = await AsyncStorage.getItem('showTips');
+      if (savedTips !== null) setShowTips(savedTips === 'true');
+    };
+    loadSettings();
+  }, []);
+
   const webviewRef = useRef(null);
 
   const fetchApiInWebView = (url, type = 'GENERIC', options = {}) => {
@@ -179,6 +195,21 @@ const App = () => {
       }
     } catch (e) { /* Ignore non-JSON messages */ }
   };
+
+  useEffect(() => {
+    const loadBackground = async () => {
+      const savedBlur = await AsyncStorage.getItem('userBlur');
+      try {
+        const savedUri = await AsyncStorage.getItem('userBackground');
+        if (savedUri) setBackgroundUri(savedUri);
+      } catch (error) {
+        console.error('Error loading background:', error);
+      }
+      setBlurAmount(parseFloat(savedBlur));
+    };
+    loadBackground();
+  }, []);
+
 
   const handleNavigationStateChange = (navState) => {
     if (!navState.loading && navState.url.includes(APP_HOME_URL_FRAGMENT) && authStatus === 'LOGGED_OUT') {
@@ -313,7 +344,15 @@ const App = () => {
 
 
   return (
-    <View style={styles.appContainer}>
+    <ImageBackground
+      source={backgroundUri ? { uri: backgroundUri } : null}
+      style={styles.appContainer}
+      resizeMode="cover"
+    >
+      {blurAmount > 0 && (
+        <BlurView intensity={blurAmount * 5} style={StyleSheet.absoluteFill} />
+      )}
+
       <StatusBar barStyle={authStatus === 'LOGGED_IN' ? "light-content" : "dark-content"} />
       <Modal visible={isChangelogVisible} animationType="slide">
         <ChangelogPage onClose={() => setIsChangelogVisible(false)} />
@@ -377,6 +416,10 @@ const App = () => {
               onNavigate={setActivePage}
               selectedMessage={selectedMessage}
               setSelectedMessage={setSelectedMessage}
+              backgroundUri={backgroundUri}
+              blurAmount={blurAmount}
+              setBackgroundUri={setBackgroundUri}
+              setBlurAmount={setBlurAmount}
             />
             <GradeDetailsModal
               visible={!!selectedCourseDetails}
@@ -389,7 +432,7 @@ const App = () => {
             </View>
         </View>
       )}
-    </View>
+    </ImageBackground>
   );
 };
 
@@ -405,7 +448,7 @@ const BackHeader = ({ title, onBack }) => (
 );
 
 // --- Page Content Wrapper with Transitions ---
-const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assignmentDetails, fetchAssignmentDetails, schedule, fetchSchedule, isLoading, onOpenChangelog, onNavigate, grades, fetchGrades, fetchGradeDetails, messages, fetchMessages, selectedMessage, setSelectedMessage }) => {
+const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assignmentDetails, fetchAssignmentDetails, schedule, fetchSchedule, isLoading, onOpenChangelog, onNavigate, grades, fetchGrades, fetchGradeDetails, messages, fetchMessages, selectedMessage, setSelectedMessage, backgroundUri, blurAmount, setBackgroundUri, setBlurAmount }) => {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     useEffect(() => {
         fadeAnim.setValue(0);
@@ -447,11 +490,24 @@ const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assi
           );
         break;
         case 'ClickGame':
-  currentPageComponent = (
-    <ClickGamePage userInfo={userInfo} onNavigateBack={() => onNavigate('More')} />
-  );
-  break;
-
+          currentPageComponent = (
+            <ClickGamePage 
+            userInfo={userInfo} 
+            onNavigateBack={() => onNavigate('More')} 
+            />
+          );
+        break;
+        case 'Settings':
+          currentPageComponent = (
+            <SettingsPage
+              onNavigateBack={() => onNavigate('More')}
+              backgroundUri={backgroundUri}
+              blurAmount={blurAmount}
+              setBackgroundUri={setBackgroundUri}
+              setBlurAmount={setBlurAmount}
+            />
+          );
+        break;
         case 'Resources':
           currentPageComponent = (
             <ResourcesPage onNavigateBack={() => onNavigate('More')} />
@@ -823,6 +879,38 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
   const [devLeaderboardEdit, setDevLeaderboardEdit] = useState({ name: '', clicks: '' });
   const animScale = useRef(new Animated.Value(1)).current;
   const floaterId = useRef(0);
+  const [cps, setCps] = useState(0);
+  const [warningShown, setWarningShown] = useState(false);
+  const clickTimestamps = useRef([]);
+  const highCpsDuration = useRef(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+
+      // keep only last 1 second of clicks
+      clickTimestamps.current = clickTimestamps.current.filter(ts => now - ts < 1000);
+      const currentCps = clickTimestamps.current.length;
+      setCps(currentCps);
+
+      // --- Anti-cheat logic ---
+      if (currentCps > 20) {
+        highCpsDuration.current += 0.25; // interval runs every 250 ms
+        if (highCpsDuration.current >= 5 && !warningShown) {
+          Alert.alert(
+            '⚠️ High CPS Detected',
+            'Your clicking speed exceeded 20 CPS for over 5 seconds.\nContinued activity may result in a ban.',
+            [{ text: 'OK', style: 'default' }]
+          );
+          setWarningShown(true);
+        }
+      } else {
+        highCpsDuration.current = 0; // reset if CPS drops
+      }
+    }, 250);
+
+    return () => clearInterval(interval);
+  }, [warningShown]);
 
   // --- Tips ---
   const [tipText, setTipText] = useState('');
@@ -867,8 +955,8 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
   const nameKey = `${userInfo.FirstName} ${userInfo.LastName.charAt(0)}.`;
   const formatNumber = (num) => num.toLocaleString();
   const rebirthStages = [
-    { cost: 100000, multiplier: 2 },
-    { cost: 300000, multiplier: 4 },
+    { cost: 150000, multiplier: 2 },
+    { cost: 375000, multiplier: 4 },
     { cost: 600000, multiplier: 8 },
     { cost: 1000000, multiplier: 16 },
   ];
@@ -970,6 +1058,7 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
 
   // --- Click handler ---
   const handleClick = async () => {
+    clickTimestamps.current.push(Date.now());
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Animated.sequence([
       Animated.timing(animScale, { toValue: 1.1, duration: 100, useNativeDriver: true }),
@@ -1036,10 +1125,9 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Tips */}
-      <Text style={{ color: '#B0B0B0', fontSize: 16, marginVertical: 10, textAlign: 'center' }}>
+      {/* <Text style={{ color: '#B0B0B0', fontSize: 16, marginVertical: 10, textAlign: 'center' }}>
         {tipText}
-      </Text>
+      </Text> */}
 
       <Animated.View style={[styles.clickCircleContainer, { transform: [{ scale: animScale }] }]}>
         <TouchableOpacity
@@ -1073,6 +1161,8 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
 
       <Text style={styles.clickScore}>{formatNumber(score)}</Text>
       <Text style={{ color: '#8E8E93', fontSize: 16, marginTop: 6 }}>Multiplier: x{clickMultiplier}</Text>
+      <Text style={{ color: '#8E8E93', fontSize: 16, marginTop: 4 }}> CPS: {cps.toFixed(1)} </Text>
+
 
       <Text style={[styles.pageTitle, { fontSize: 24, marginTop: 30 }]}>Leaderboard</Text>
       {loading ? (
@@ -1403,6 +1493,129 @@ const GradeDetailsModal = ({ visible, details, onClose }) => {
   );
 };
 
+const SettingsPage = ({ onNavigateBack, backgroundUri, blurAmount, setBackgroundUri, setBlurAmount }) => {
+  const [localBackgroundUri, setLocalBackgroundUri] = useState(null);
+  const [localBlurAmount, setLocalBlurAmount] = useState(0);
+
+  useEffect(() => {
+    (async () => {
+      const savedBg = await AsyncStorage.getItem('userBackground');
+      const savedBlur = await AsyncStorage.getItem('userBlur');
+      if (savedBg) setBackgroundUri(savedBg);
+      if (savedBlur) setBlurAmount(parseFloat(savedBlur));
+    })();
+  }, []);
+
+  const pickBackground = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission required', 'Please allow photo access to choose a background.');
+      return;
+    }
+
+    // Step 1: Pick image
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: false, // user can pick first without cropping
+      quality: 1,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
+
+    if (!result.canceled) {
+      const selectedUri = result.assets[0].uri;
+
+      // Step 2: Ask if they want to crop it
+      Alert.alert(
+        'Edit Image?',
+        'Would you like to crop or resize the image before using it as a background?',
+        [
+          {
+            text: 'Crop',
+            onPress: async () => {
+              const cropped = await ImageManipulator.manipulateAsync(
+                selectedUri,
+                [],
+                { compress: 1, format: ImageManipulator.SaveFormat.PNG }
+              );
+              setBackgroundUri(cropped.uri);
+              await AsyncStorage.setItem('userBackground', cropped.uri);
+            },
+          },
+          {
+            text: 'Use as is',
+            onPress: async () => {
+              setBackgroundUri(selectedUri);
+              await AsyncStorage.setItem('userBackground', selectedUri);
+            },
+            style: 'default',
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+    }
+  };
+
+  const handleBlurChange = async (val) => {
+    setBlurAmount(val);
+    await AsyncStorage.setItem('userBlur', val.toString());
+  };
+
+  const resetBackground = async () => {
+    setBackgroundUri(null);
+    setBlurAmount(0);
+    await AsyncStorage.removeItem('userBackground');
+    await AsyncStorage.removeItem('userBlur');
+  };
+
+  return (
+    <View style={styles.pageContentContainer}>
+      <BackHeader title="Settings" onBack={onNavigateBack} />
+
+      <ScrollView style={{ width: '100%' }}>
+        <Text style={styles.pageTitle}>Background</Text>
+
+        <View style={styles.settingsCard}>
+          <Text style={styles.settingsCardSubtitle}>Choose a custom background image</Text>
+
+          {backgroundUri ? (
+            <Image source={{ uri: backgroundUri }} style={styles.previewImage} />
+          ) : (
+            <View style={styles.previewPlaceholder}>
+              <Text style={styles.placeholderText}>No background set</Text>
+            </View>
+          )}
+          <TouchableOpacity onPress={pickBackground} style={[styles.upgradeButton, { marginTop: 10 }]}>
+            <Text style={styles.upgradeText}>Pick Background</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={resetBackground} style={[styles.upgradeButton, { marginTop: 10 }]}>
+            <Text style={styles.upgradeText}>Reset Background</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.pageTitle}>Background Blur</Text>
+        <View style={styles.settingsCard}>
+          <Slider
+            minimumValue={0}
+            maximumValue={20}
+            step={1}
+            value={blurAmount}
+            onValueChange={handleBlurChange}
+            minimumTrackTintColor="#007AFF"
+            maximumTrackTintColor="#3A3A3C"
+            thumbTintColor="#007AFF"
+          />
+          <Text style={styles.blurLabel}>Blur: {blurAmount}</Text>
+        </View>
+
+        <Text style={styles.pageTitle}>Clicker Specials</Text>
+        <View style={styles.settingsCard}>
+          <Text style={styles.settingsCardSubtitle}>Coming soon...</Text>
+        </View>
+      </ScrollView>
+    </View>
+  );
+};
+
+
 const ResourcesPage = ({ onNavigateBack }) => {
   const handleOpenLink = (url) => { Linking.openURL(url).catch(err => console.error("Couldn't load page", err)); };
   const ResourceItem = ({ label, url }) => (
@@ -1444,7 +1657,7 @@ const styles = StyleSheet.create({
   loadingText: { color: '#FFFFFF', marginLeft: 10, fontSize: 16 },
   loginHeader: { paddingVertical: 10, paddingHorizontal: 20, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
   loginTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', color: '#1C1C1E' },
-  appHeader: { marginTop: -30, paddingHorizontal: 20, backgroundColor: '#1C1C1E'},
+  appHeader: { marginTop: -30, paddingHorizontal: 20},
   appTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', color: '#FFFFFF' },
   subtitle: { fontSize: 14, color: '#D32F2F', textAlign: 'center', marginTop: 8, fontWeight: '500' },
   mainContent: { flex: 1, justifyContent: 'center', alignItems: 'center', width: '100%' },
@@ -1576,6 +1789,18 @@ const styles = StyleSheet.create({
   upgradeText:{color:'#FFFFFF',fontSize:16,fontWeight:'600'},
   floaterText:{color:'#FFFFFF',fontSize:22,fontWeight:'bold',position:'absolute'},
   devInput: { backgroundColor: '#2C2C2E', color: '#FFF', borderRadius: 8, padding: 10, width: '100%', marginVertical: 6, fontSize: 16, },
+  blurLabel: { color: '#FFFFFF', fontSize: 16, marginTop: 8, textAlign: 'center' },
+  settingsCard:{backgroundColor:'#2C2C2E',borderRadius:12,padding:15,marginBottom:15,width:'100%'},
+  settingsCardTitle:{color:'#FFFFFF',fontSize:18,fontWeight:'bold',marginBottom:4},
+  settingsCardSubtitle:{color:'#8E8E93',fontSize:14,marginBottom:10},
+  colorRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingVertical:12,borderBottomWidth:1,borderColor:'#3A3A3C'},
+  colorLabel:{color:'#FFFFFF',fontSize:16,flex:1},
+  upgradeButton:{backgroundColor:"#007AFF",borderRadius:12,padding:14,alignItems:'center',marginTop:10},
+  upgradeText:{color:'#FFFFFF',fontSize:16,fontWeight:'600'},
+  previewImage:{width:'100%',height:180,borderRadius:10,marginTop:10,resizeMode:'cover'},
+  previewPlaceholder:{width:'100%',height:180,borderRadius:10,backgroundColor:'#3A3A3C',alignItems:'center',justifyContent:'center',marginTop:10},
+  placeholderText:{color:'#8E8E93',fontSize:16},
+  blurLabel:{color:'#A0A0A0',fontSize:15,textAlign:'center',marginTop:8}
 
 });
 
