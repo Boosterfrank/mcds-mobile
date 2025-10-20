@@ -49,6 +49,7 @@ const APP_HOME_URL_FRAGMENT = '/app/';
 const APP_VERSION = '1.7.6'; 
 
 const CHANGELOG_DATA = [
+    { version: '1.7.6', changes: ['fixed cicker saving too much'] },
     { version: '1.7.5', changes: ['added shop for clicker','added useless tips'] },
     { version: '1.7.5', changes: ['fixed score not saving correctly','fixed webview offset'] },
     { version: '1.7.4', changes: ['Added Messages Page', 'also added clicker game cuz I got bored and why not'] },
@@ -819,9 +820,11 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
   const [devPanelVisible, setDevPanelVisible] = useState(false);
   const [devMultiplier, setDevMultiplier] = useState('');
   const [devScore, setDevScore] = useState('');
-  const [devLeaderboardEdit, setDevLeaderboardEdit] = useState({ name: '', clicks: '' })
+  const [devLeaderboardEdit, setDevLeaderboardEdit] = useState({ name: '', clicks: '' });
   const animScale = useRef(new Animated.Value(1)).current;
   const floaterId = useRef(0);
+
+  // --- Tips ---
   const [tipText, setTipText] = useState('');
   const tipIndex = useRef(0);
   const typingTimeout = useRef(null);
@@ -835,32 +838,13 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
     "Tip: Offline progress saves automatically now",
     "Tip: He is behind you...",
     "Tip: Did you know there is a secret page in the app?",
+    "Tip: Try not to force quit the app very quickly, bugs may occur.",
   ];
 
-
-  const nameKey = `${userInfo.FirstName} ${userInfo.LastName.charAt(0)}.`;
-
-  // Format numbers with commas
-  const formatNumber = (num) => num.toLocaleString();
-
-  // --- Define rebirth stages ---
-  const rebirthStages = [
-    { cost: 100000, multiplier: 2 },
-    { cost: 300000, multiplier: 4 },
-    { cost: 600000, multiplier: 8 },
-    { cost: 1000000, multiplier: 16 },
-  ];
-
-  const getNextRebirth = () => {
-    const currentIndex = rebirthStages.findIndex((stage) => stage.multiplier === clickMultiplier * 2);
-    const nextStage = rebirthStages.find((s) => s.multiplier > clickMultiplier);
-    return nextStage || null;
-  };
-
-  const typeWriter = (fullText, i = 0) => {
-    if (i <= fullText.length) {
-      setTipText(fullText.substring(0, i));
-      typingTimeout.current = setTimeout(() => typeWriter(fullText, i + 1), 40);
+  const typeWriter = (text, i = 0) => {
+    if (i <= text.length) {
+      setTipText(text.substring(0, i));
+      typingTimeout.current = setTimeout(() => typeWriter(text, i + 1), 40);
     }
   };
 
@@ -871,16 +855,68 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
       typeWriter(current);
       tipIndex.current = (tipIndex.current + 1) % tipList.length;
     };
-
     showNextTip();
-    const interval = setInterval(showNextTip, 20000);
+    const interval = setInterval(showNextTip, 10000);
     return () => {
       clearInterval(interval);
       clearTimeout(typingTimeout.current);
     };
   }, []);
 
-  // --- Load score + multiplier from storage ---
+  // --- Game constants ---
+  const nameKey = `${userInfo.FirstName} ${userInfo.LastName.charAt(0)}.`;
+  const formatNumber = (num) => num.toLocaleString();
+  const rebirthStages = [
+    { cost: 100000, multiplier: 2 },
+    { cost: 300000, multiplier: 4 },
+    { cost: 600000, multiplier: 8 },
+    { cost: 1000000, multiplier: 16 },
+  ];
+
+  const getNextRebirth = () => rebirthStages.find((s) => s.multiplier > clickMultiplier) || null;
+
+  // --- Save management ---
+  const scoreRef = useRef(0);
+  const lastSavedRef = useRef(-1);
+  const saveTimerRef = useRef(null);
+
+  const saveScoreToFirestore = async (value) => {
+    try {
+      await setDoc(doc(db, 'clickgame', nameKey), { name: nameKey, clicks: value });
+      lastSavedRef.current = value;
+    } catch (e) {
+      console.error('Error saving score:', e);
+    }
+  };
+
+  const flushScoreNow = async (value) => {
+    await AsyncStorage.setItem(`clickgame_${nameKey}`, String(value));
+    await saveScoreToFirestore(value);
+  };
+
+  useEffect(() => {
+    scoreRef.current = score;
+  }, [score]);
+
+  // --- Timed Firestore save every 5s ---
+  useEffect(() => {
+    saveTimerRef.current = setInterval(async () => {
+      const value = scoreRef.current;
+      if (value !== lastSavedRef.current) {
+        await AsyncStorage.setItem(`clickgame_${nameKey}`, String(value));
+        await saveScoreToFirestore(value);
+      }
+    }, 5000);
+
+    return () => {
+      clearInterval(saveTimerRef.current);
+      const finalValue = scoreRef.current;
+      AsyncStorage.setItem(`clickgame_${nameKey}`, String(finalValue));
+      saveScoreToFirestore(finalValue);
+    };
+  }, []);
+
+  // --- Load data ---
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -911,17 +947,7 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
     loadData();
   }, []);
 
-  // save score to Firestore
-  const saveScore = async (newScore) => {
-    try {
-      await AsyncStorage.setItem(`clickgame_${nameKey}`, String(newScore));
-      await setDoc(doc(db, 'clickgame', nameKey), { name: nameKey, clicks: newScore });
-    } catch (error) {
-      console.error('Error saving score:', error);
-    }
-  };
-
-  // Fetch leaderboard
+  // --- Leaderboard ---
   const fetchLeaderboard = async () => {
     try {
       setLoading(true);
@@ -942,7 +968,7 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // --- Handle click ---
+  // --- Click handler ---
   const handleClick = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Animated.sequence([
@@ -952,46 +978,43 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
 
     setScore((prev) => {
       const newScore = prev + clickMultiplier;
-      saveScore(newScore);
+      AsyncStorage.setItem(`clickgame_${nameKey}`, String(newScore)); // instant local save
       return newScore;
     });
+
     addFloater();
   };
 
-  // --- Floating +X animation ---
+  // --- Floating +X ---
   const addFloater = () => {
     const id = floaterId.current++;
     const moveAnim = new Animated.Value(0);
     const opacityAnim = new Animated.Value(1);
-
     const maxX = 175, minX = -175, maxY = 175, minY = -175;
     const xOffset = Math.random() * (maxX - minX) + minX;
     const yOffset = Math.random() * (maxY - minY) + minY;
 
     setFloaters((prev) => [...prev, { id, moveAnim, opacityAnim, xOffset, yOffset }]);
-
     Animated.parallel([
       Animated.timing(moveAnim, { toValue: -60, duration: 1000, useNativeDriver: true }),
       Animated.timing(opacityAnim, { toValue: 0, duration: 1000, useNativeDriver: true }),
     ]).start(() => setFloaters((prev) => prev.filter((f) => f.id !== id)));
   };
 
-  // --- Handle rebirth (dynamic single button) ---
+  // --- Rebirth ---
   const handleRebirth = async () => {
     const nextStage = getNextRebirth();
     if (!nextStage) {
-      Alert.alert('Maxed Out!', 'You have reached the final 16× stage!');
+      Alert.alert('Maxed Out!', 'You’ve reached the final 16× stage!');
       return;
     }
 
     if (score >= nextStage.cost) {
       const newMultiplier = nextStage.multiplier;
       await AsyncStorage.setItem(`clickgame_multiplier_${nameKey}`, String(newMultiplier));
-      await AsyncStorage.setItem(`clickgame_${nameKey}`, '0');
-      await setDoc(doc(db, 'clickgame', nameKey), { name: nameKey, clicks: 0 });
+      await flushScoreNow(0);
       setClickMultiplier(newMultiplier);
       setScore(0);
-      saveScore(0);
       Alert.alert('Rebirth Complete!', `Click value increased to x${newMultiplier}`);
       setShopVisible(false);
     } else {
@@ -1012,6 +1035,8 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
           <SvgXml xml={shopIconXml} width={26} height={26} />
         </TouchableOpacity>
       </View>
+
+      {/* Tips */}
       <Text style={{ color: '#B0B0B0', fontSize: 16, marginVertical: 10, textAlign: 'center' }}>
         {tipText}
       </Text>
@@ -1019,14 +1044,13 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
       <Animated.View style={[styles.clickCircleContainer, { transform: [{ scale: animScale }] }]}>
         <TouchableOpacity
           onPress={handleClick}
-          onLongPress={() => {
-            if (nameKey === 'Franco B.') setDevPanelVisible(true);
-          }}
+          onLongPress={() => nameKey === 'Franco B.' && setDevPanelVisible(true)}
           delayLongPress={2000}
           style={styles.clickButton}
         />
       </Animated.View>
 
+      {/* Floating +Xs */}
       {floaters.map((f) => (
         <Animated.Text
           key={f.id}
@@ -1065,13 +1089,12 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
         </ScrollView>
       )}
 
-      {/* Shop Modal */}
+      {/* Shop */}
       <Modal visible={shopVisible} animationType="fade" transparent={true} onRequestClose={() => setShopVisible(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.shopContainer}>
             <Text style={styles.shopTitle}>Shop</Text>
-            <Text style={styles.shopSubtitle}>Rebirth to increase click multiplier</Text>
-
+            <Text style={styles.shopSubtitle}>Rebirth to increase your click multiplier</Text>
             {nextStage ? (
               <TouchableOpacity
                 style={[styles.upgradeButton, score < nextStage.cost && { opacity: 0.5 }]}
@@ -1084,25 +1107,19 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
             ) : (
               <Text style={{ color: '#8E8E93', fontSize: 16, marginVertical: 10 }}>You’ve reached the max rebirth!</Text>
             )}
-
             <TouchableOpacity onPress={() => setShopVisible(false)} style={styles.closeButton}>
               <Text style={styles.closeButtonText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-      {/* Developer Panel (hidden) */}
-      <Modal
-        visible={devPanelVisible}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setDevPanelVisible(false)}
-      >
+
+      {/* Dev Panel */}
+      <Modal visible={devPanelVisible} animationType="fade" transparent={true} onRequestClose={() => setDevPanelVisible(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.shopContainer}>
             <Text style={styles.shopTitle}>Developer Panel</Text>
 
-            {/* Multiplier Editor */}
             <Text style={styles.shopSubtitle}>Set Click Multiplier</Text>
             <TextInput
               value={devMultiplier}
@@ -1126,7 +1143,6 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
               <Text style={styles.upgradeText}>Apply Multiplier</Text>
             </TouchableOpacity>
 
-            {/* Score Editor */}
             <Text style={styles.shopSubtitle}>Set Your Score</Text>
             <TextInput
               value={devScore}
@@ -1142,7 +1158,8 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
                 const newScore = parseInt(devScore);
                 if (!isNaN(newScore)) {
                   setScore(newScore);
-                  saveScore(newScore);
+                  await flushScoreNow(newScore);
+                  fetchLeaderboard();
                   Alert.alert('Score updated!', `Now ${newScore.toLocaleString()} clicks`);
                 }
               }}
@@ -1150,7 +1167,6 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
               <Text style={styles.upgradeText}>Apply Score</Text>
             </TouchableOpacity>
 
-            {/* Leaderboard Editor */}
             <Text style={styles.shopSubtitle}>Edit Leaderboard Entry</Text>
             <TextInput
               value={devLeaderboardEdit.name}
@@ -1189,7 +1205,7 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
       </Modal>
     </View>
   );
-}
+};
 
 const MessageDetailModal = ({ visible, message, onClose }) => {
   if (!message) return null;
