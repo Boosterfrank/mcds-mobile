@@ -154,7 +154,7 @@ const App = () => {
       };
 
       if (message.type === 'API_ERROR') {
-        triggerRelogin(`API Error: ${message.error}. Please sign in.`);
+        triggerRelogin(`Error: ${message.error}. Please sign in.`);
         console.log(responseData);
         return;
       }
@@ -1759,7 +1759,7 @@ const styles = StyleSheet.create({
   backArrow: { color: '#007AFF', fontSize: 18, fontWeight: '600' },
   backText: { color: '#007AFF', fontSize: 16, fontWeight: '600' },
   backHeaderTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', textAlign: 'center', flex: 1 },
-  skipButton: { backgroundColor:"#007AFF", borderRadius:12, position: 'absolute', right: 18, top: 10, padding: 15, },
+  skipButton: { backgroundColor:"#007AFF", borderRadius:12, position: 'absolute', marginLeft: 5, right: 18, top: 10, padding: 15, },
   skipText: { color:'#FFFFFF', fontSize:16, fontWeight:'600' },
   messageCard: { backgroundColor: '#2C2C2E', borderRadius: 12, padding: 15, marginBottom: 15, width: '100%', },
   messageSubject: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
