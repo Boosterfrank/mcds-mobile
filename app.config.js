@@ -6,7 +6,7 @@ module.exports = ({ config }) => {
     // Top-level app config fields
     name: "MCDS",
     slug: "mcds-mobile",
-    version: "1.7.6",
+    version: "1.7.7",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "dark",

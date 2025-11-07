@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,13 +14,17 @@ import {
   ImageBackground,
   TextInput,
   Modal,
-  Dimensions
+  Switch,
+  Dimensions,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { SvgXml } from 'react-native-svg';
 import * as Clipboard from 'expo-clipboard';
 import moment from 'moment';
+import { Provider as PaperProvider } from 'react-native-paper';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,6 +32,7 @@ import Slider from '@react-native-community/slider';
 import * as Linking from 'expo-linking';
 import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
+import { RichEditor, RichToolbar, actions } from 'react-native-pell-rich-editor';
 import FormattedText from './components/FormattedText';
 import { db } from './firebaseConfig';
 import { collection, doc, getDoc, setDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
@@ -49,12 +54,13 @@ const ASSIGNMENT_DETAIL_API_URL = `${BASE_URL}/api/assignment2/UserAssignmentDet
 const SCHEDULE_API_URL = `${BASE_URL}/api/schedule/MyDayCalendarStudentList/`;
 const GRADES_API_URL = `${BASE_URL}/api/datadirect/ParentStudentUserClassesGet`;
 const GRADE_DETAILS_API_URL = `${BASE_URL}/api/gradebook/AssignmentPerformanceStudent`;
-const MESSAGES_API_URL = `${BASE_URL}/api/message/inbox/?format=json&pageNumber=1`;
+const MESSAGES_API_URL = `${BASE_URL}/api/message/inbox/?format=json`;
 const APP_HOME_URL_FRAGMENT = '/app/';
 
-const APP_VERSION = '1.7.6'; 
+const APP_VERSION = '1.7.7'; 
 
 const CHANGELOG_DATA = [
+    { version: '1.7.7', changes: ['Added change assignment status', 'Added ability to send POST requests to the server', 'Added the ability to send messages', 'Lots of bug fixes'] },
     { version: '1.7.6', changes: ['Fixed cicker saving too much', 'Added custom app backgrounds', 'Added dark/tinted icons'] },
     { version: '1.7.5', changes: ['Added shop for clicker','added useless tips'] },
     { version: '1.7.5', changes: ['Fixed score not saving correctly','fixed webview offset'] },
@@ -99,7 +105,68 @@ const App = () => {
   const [backgroundUri, setBackgroundUri] = useState(null);
   const [blurAmount, setBlurAmount] = useState(0);
   const [showTips, setShowTips] = useState(true);
+  const [csrfToken, setCsrfToken] = useState(null);
+  const [fetchAllMessages, setFetchAllMessages] = useState(false);
+  const [isReloginMode, setIsReloginMode] = useState(false);
+  const [allRecipients, setAllRecipients] = useState([]);
+  const richRef = useRef();
 
+  const resetWebViewToBase = () => {
+    if (webviewRef.current) {
+      console.log('[WebView] Resetting to base URL...');
+      webviewRef.current.stopLoading?.();
+      webviewRef.current.injectJavaScript(`
+        window.location.href = '${LOGIN_URL}';
+        true;
+      `);
+    }
+  };
+
+  useEffect(() => {
+    (async () => {
+      const saved = await AsyncStorage.getItem('fetchAllMessages');
+      if (saved !== null) setFetchAllMessages(saved === 'true');
+    })();
+  }, []);
+
+  // Function to fetch CSRF token using the WebView context
+  const fetchCsrfToken = () => {
+    if (!webviewRef.current) {
+      console.warn('WebView not ready to fetch CSRF token.');
+      return;
+    }
+
+    const script = `
+      fetch("https://miamicountryday.myschoolapp.com/api/security/csrftoken", {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json, text/plain, */*'
+        }
+      })
+      .then(res => {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.text();
+      })
+      .then(token => {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'CSRF_TOKEN',
+          data: token,
+          success: true
+        }));
+      })
+      .catch(err => {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'API_ERROR',
+          error: err.message
+        }));
+      });
+      true;
+    `;
+
+    console.log('[CSRF] Fetching new token...');
+    webviewRef.current.injectJavaScript(script);
+  };
   useEffect(() => {
     const loadSettings = async () => {
       const savedTips = await AsyncStorage.getItem('showTips');
@@ -141,25 +208,90 @@ const App = () => {
     webviewRef.current?.injectJavaScript(script);
   };
 
+const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
+  if (!csrfToken) {
+    console.warn('[POST DEBUG] Missing CSRF token — aborting.');
+    return;
+  }
+
+  const debugScript = `
+    console.log('[POST DEBUG] Sending POST to: ${url}');
+    console.log('[POST DEBUG] Body:', ${JSON.stringify(body)});
+    console.log('[POST DEBUG] Token:', '${csrfToken}');
+
+    fetch("${url}", {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/plain, */*',
+        'requestverificationtoken': '${csrfToken}'
+      },
+      body: JSON.stringify(${JSON.stringify(body)})
+    })
+    .then(async (r) => {
+      const text = await r.text();
+      console.log('[POST DEBUG] Status:', r.status);
+      console.log('[POST DEBUG] Response text:', text.slice(0, 500)); // limit to 500 chars
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: '${type}',
+        status: r.status,
+        success: r.ok,
+        data: text
+      }));
+    })
+    .catch(e => {
+      console.log('[POST DEBUG] ERROR:', e.message);
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'API_ERROR',
+        error: e.message
+      }));
+    });
+    true;
+  `;
+
+  console.log('[WebView POST]', type, url, body);
+  webviewRef.current?.injectJavaScript(debugScript);
+};
+
+  useEffect(() => {
+    if (authStatus === 'LOGGED_IN') {
+      fetchCsrfToken(); // Retrieve fresh token immediately after login
+    }
+  }, [authStatus]);
+
+
   const handleWebViewMessage = (event) => {
     try {
-      const message = JSON.parse(event.nativeEvent.data);
-      const triggerRelogin = (reason) => {
-        setIsLoading(false);
-        setUserInfo(null);
-        setAssignments(null);
-        setSchedule({});
-        setAuthStatus('LOGGED_OUT');
-        setLoginReason(reason);
-      };
+    const message = JSON.parse(event.nativeEvent.data);
 
-      if (message.type === 'API_ERROR') {
-        triggerRelogin(`API Error: ${message.error}. Please sign in.`);
-        console.log(responseData);
-        return;
-      }
+    if (message.type === 'CSRF_TOKEN') {
+      setCsrfToken(message.data?.replace(/"/g, '').trim());
+      console.log('[CSRF TOKEN SAVED]', message.data);
+      return; // stop here, don’t parse further
+    }
+
+    const triggerRelogin = (reason) => {
+      setIsLoading(false);
+      setUserInfo(null);
+      setAssignments(null);
+      setSchedule({});
+      setAuthStatus('LOGGED_OUT');
+      setLoginReason(reason);
+      console.log('[Relogin] Triggered.');
+      setIsReloginMode(true);
+      setIsLoggedIn(false);
+      clearSessionCookies();
+      resetWebViewToBase();  // only this first redirect
+    };
+
+    if (message.type === 'API_ERROR') {
+      triggerRelogin(`API Error: ${message.error}. Please sign in.`);
+      return;
+    }
       
       if (message.success) {
+        // console.log('[POST RESPONSE]', message.status, message.data);
         let responseData;
         try { responseData = JSON.parse(message.data); }
         catch (e) { triggerRelogin('Failed to parse a server response. Please sign in again.'); return; }
@@ -190,6 +322,17 @@ const App = () => {
         }
         else if (message.type === 'MESSAGES') {
           setMessages(responseData);
+        }
+        else if (message.type === 'FETCH_RECIPIENTS') {
+          try {
+            const parsed = Array.isArray(responseData)
+              ? responseData
+              : JSON.parse(responseData || '[]');
+            console.log('[Recipients] Loaded', parsed.length);
+            setAllRecipients(parsed); // 👈 no renaming, keep keys as-is
+          } catch (err) {
+            console.warn('Failed to parse recipients:', err);
+          }
         }
         setIsLoading(false);
       }
@@ -254,9 +397,12 @@ const App = () => {
     fetchApiInWebView(url, 'GRADE_DETAILS');
   }, []);
 
-  const fetchMessagesCallback = useCallback(() => {
-    fetchApiInWebView(MESSAGES_API_URL, 'MESSAGES');
-  }, []);
+  const fetchMessagesCallback = useCallback((page = 1) => {
+    const baseUrl = 'https://miamicountryday.myschoolapp.com/api/message/inbox/?format=json';
+    const url = fetchAllMessages ? baseUrl : `${baseUrl}&pageNumber=${page}`;
+    console.log('[FetchMessages]', fetchAllMessages ? 'ALL' : `page ${page}`, url);
+    fetchApiInWebView(url, 'MESSAGES');
+  }, [fetchAllMessages]);
 
   // --- Update check on app launch ---
   useEffect(() => {
@@ -297,7 +443,7 @@ const App = () => {
     setUserInfo({
       FirstName: 'User',
       LastName: 'Preview',
-      Email: 'preview@mcds.edu',
+      Email: 'upreview29@miamicountryday.org',
       StudentInfo: { GradYear: '2030' },
     });
 
@@ -307,6 +453,7 @@ const App = () => {
           AssignmentIndexId: 1, 
           GroupName: 'Mathematics - H', 
           ShortDescription: 'Algebra Worksheet', 
+          LongDescription: "Good evening Upper School,&nbsp;\u003Cbr\u003EI'm excited to announce that I am hosting another \u003Cb\u003EFishing Competition\u003C/b\u003E on \u003Cb\u003EFisher Island\u003C/b\u003E on \u003Cb\u003ENovember 16 from 10am-12pm\u003C/b\u003E!&nbsp;\u003Cbr\u003E\u003Cbr\u003EThe last one was such a success and it was so nice to see your support.&nbsp;\u003Cbr\u003EYou can earn \u003Cb\u003E10 service hours\u003C/b\u003E by coming to the event. All you have to do is \u003Cb\u003Eregister\u003C/b\u003E by zelleing \u003Cb\u003Elena@bigdreamscf.org\u003C/b\u003E $100 and sending me the confirmation at 786 847 3178.&nbsp;\u003Cbr\u003E\u003Cbr\u003EThe purpose of the event is to continue to raise money to \u003Cb\u003Ereopen the operating room\u003C/b\u003E at Clinica Santa Rosa De Lima. I am visiting the clinic in November over Thanksgiving Break and want to raise the most money I can before my trip there. I am super excited to donate the \u003Cb\u003Efirst 10k\u003C/b\u003E that you all helped me raise.&nbsp;\u003Cbr\u003E\u003Cbr\u003EI hope to see you at the fishing competition. Reach out if you have any questions.&nbsp",
           DateDue: '10/08/2025 11:59 PM', 
           AssignmentStatusType: 0 
         },
@@ -349,8 +496,9 @@ const App = () => {
       style={styles.appContainer}
       resizeMode="cover"
     >
+    <PaperProvider>
       {blurAmount > 0 && (
-        <BlurView intensity={blurAmount * 5} style={StyleSheet.absoluteFill} />
+        <BlurView intensity={blurAmount * 5} style={StyleSheet.absoluteFill} pointerEvents="none"/>
       )}
 
       <StatusBar barStyle={authStatus === 'LOGGED_IN' ? "light-content" : "dark-content"} />
@@ -383,6 +531,13 @@ const App = () => {
 
       {/* Main app content is only displayed on top when fully logged in */}
       {authStatus === 'LOGGED_IN' && userInfo && (
+      <TouchableWithoutFeedback
+        onPress={() => {
+          Keyboard.dismiss();
+          if (richRef?.current) richRef.current.blurContentEditor?.(); // handles RichEditor
+        }}
+        accessible={false} // ensures taps still go through to children
+      >
         <View style={{flex: 1}}>
           <SafeAreaView/>
             <View style={styles.appHeader}>
@@ -420,6 +575,13 @@ const App = () => {
               blurAmount={blurAmount}
               setBackgroundUri={setBackgroundUri}
               setBlurAmount={setBlurAmount}
+              postApiInWebView={postApiInWebView}
+              fetchAllMessages={fetchAllMessages}
+              setFetchAllMessages={setFetchAllMessages}
+              fetchApiInWebView={fetchApiInWebView}
+              allRecipients={allRecipients}
+              setAllRecipients={setAllRecipients}
+              richRef={richRef}
             />
             <GradeDetailsModal
               visible={!!selectedCourseDetails}
@@ -431,7 +593,9 @@ const App = () => {
                 <SafeAreaView style={{backgroundColor: styles.navBar.backgroundColor}} edges={['bottom']} />
             </View>
         </View>
+        </TouchableWithoutFeedback>
       )}
+      </PaperProvider>
     </ImageBackground>
   );
 };
@@ -448,7 +612,7 @@ const BackHeader = ({ title, onBack }) => (
 );
 
 // --- Page Content Wrapper with Transitions ---
-const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assignmentDetails, fetchAssignmentDetails, schedule, fetchSchedule, isLoading, onOpenChangelog, onNavigate, grades, fetchGrades, fetchGradeDetails, messages, fetchMessages, selectedMessage, setSelectedMessage, backgroundUri, blurAmount, setBackgroundUri, setBlurAmount }) => {
+const PageContent = ({ activePage, userInfo, richRef, assignments, postApiInWebView, fetchAllMessages, setFetchAllMessages, fetchAssignments, assignmentDetails, fetchAssignmentDetails, schedule, fetchSchedule, isLoading, onOpenChangelog, onNavigate, grades, fetchGrades, fetchGradeDetails, messages, fetchMessages, selectedMessage, setSelectedMessage, backgroundUri, blurAmount, setBackgroundUri, setBlurAmount, fetchApiInWebView, setAllRecipients, allRecipients }) => {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     useEffect(() => {
         fadeAnim.setValue(0);
@@ -458,7 +622,7 @@ const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assi
     let currentPageComponent;
     switch (activePage) {
         case 'Home': currentPageComponent = <HomePage userInfo={userInfo} />; break;
-        case 'Assignments': currentPageComponent = <AssignmentCenterPage assignments={assignments} fetchAssignments={fetchAssignments} isLoading={isLoading} assignmentDetails={assignmentDetails} fetchAssignmentDetails={fetchAssignmentDetails} />; break;
+        case 'Assignments': currentPageComponent = <AssignmentCenterPage postApiInWebView={postApiInWebView} assignments={assignments} fetchAssignments={fetchAssignments} isLoading={isLoading} assignmentDetails={assignmentDetails} fetchAssignmentDetails={fetchAssignmentDetails} />; break;
         case 'Schedule': currentPageComponent = <SchedulePage scheduleData={schedule} fetchSchedule={fetchSchedule} isLoading={isLoading} />; break;
         case 'More':
           currentPageComponent = (
@@ -486,6 +650,11 @@ const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assi
             setSelectedMessage={setSelectedMessage}
             isLoading={isLoading}
             onNavigateBack={() => onNavigate('More')}
+            postApiInWebView={postApiInWebView}
+            fetchAllMessages={fetchAllMessages}
+            fetchApiInWebView={fetchApiInWebView}
+            setAllRecipients={setAllRecipients}
+            allRecipients={allRecipients}
           />
           );
         break;
@@ -505,6 +674,8 @@ const PageContent = ({ activePage, userInfo, assignments, fetchAssignments, assi
               blurAmount={blurAmount}
               setBackgroundUri={setBackgroundUri}
               setBlurAmount={setBlurAmount}
+              fetchAllMessages={fetchAllMessages}
+              setFetchAllMessages={setFetchAllMessages}
             />
           );
         break;
@@ -612,7 +783,7 @@ const SchedulePage = ({ scheduleData, fetchSchedule, isLoading }) => {
     );
 };
 
-const AssignmentCenterPage = ({ assignments, fetchAssignments, setAssignments, updateStatus, isLoading, assignmentDetails, fetchAssignmentDetails }) => {
+const AssignmentCenterPage = ({ assignments, fetchAssignments, setAssignments, postApiInWebView, updateStatus, isLoading, assignmentDetails, fetchAssignmentDetails }) => {
     const [weekOffset, setWeekOffset] = useState(0);
     const [selectedAssignment, setSelectedAssignment] = useState(null);
 
@@ -653,14 +824,16 @@ const AssignmentCenterPage = ({ assignments, fetchAssignments, setAssignments, u
         
     return (
         <View style={[styles.pageContentContainer, styles.placeholderAlignment]}>
-            <AssignmentDetailModal 
-              visible={!!selectedAssignment} 
-              assignment={selectedAssignment}
-              details={selectedAssignment ? assignmentDetails[selectedAssignment.AssignmentIndexId] : null}
-              isLoadingDetails={selectedAssignment && !assignmentDetails[selectedAssignment.AssignmentIndexId]}
-              onClose={() => setSelectedAssignment(null)} 
-              onStatusUpdate={handleStatusUpdate} 
-            />
+          <AssignmentDetailModal 
+            postApiInWebView={postApiInWebView}
+            visible={!!selectedAssignment} 
+            assignment={selectedAssignment}
+            details={selectedAssignment ? assignmentDetails[selectedAssignment.AssignmentIndexId] : null}
+            isLoadingDetails={selectedAssignment && !assignmentDetails[selectedAssignment.AssignmentIndexId]}
+            onClose={() => setSelectedAssignment(null)}
+            fetchAssignments={fetchAssignments}   // 🔹 Added
+            fetchAssignmentDetails={fetchAssignmentDetails} // optional
+          />
             <Text style={styles.pageTitle}>Assignment Center</Text>
             <View style={styles.weekNavigator}>
                 <TouchableOpacity onPress={() => setWeekOffset(weekOffset - 1)} style={styles.weekNavButton}><Text style={styles.weekNavText}>{'< Prev'}</Text></TouchableOpacity>
@@ -699,54 +872,217 @@ const AssignmentCard = ({ assignment, onSelect }) => {
     return (<TouchableOpacity onPress={onSelect} style={styles.assignmentCard}><View style={styles.assignmentHeader}><Text style={styles.assignmentClass} numberOfLines={1}>{assignment.GroupName}</Text><Text style={[styles.assignmentStatus, { color }]}>{status}</Text></View><Text style={styles.assignmentDesc}><FormattedText html={assignment.ShortDescription} /></Text><Text style={styles.assignmentDue}>Due: {moment(assignment.DateDue, "M/D/YYYY h:mm A").format('ddd, MMM D [at] h:mm A')}</Text></TouchableOpacity>);
 };
 
-const AssignmentDetailModal = ({ visible, assignment, details, isLoadingDetails, onClose, onStatusUpdate }) => {
-    if (!assignment) return null;
+const AssignmentDetailModal = ({
+  visible,
+  assignment,
+  assignmentDetails,
+  details,
+  isLoadingDetails,
+  onClose,
+  postApiInWebView,
+  fetchAssignments,
+  fetchAssignmentDetails,
+}) => {
+  if (!assignment) return null;
 
-    const { status, color } = getStatusInfo(assignment.AssignmentStatusType);
-    const cleanHtml = (str) => str?.replace(/<[^>]*>/g, '').replace(/&#160;/g, ' ') || '';
-    
-    const gradeInfo = details?.AssignmentGrade;
-    const maxPoints = details?.MaxPoints;
+  const [selectedStatus, setSelectedStatus] = useState(-1);
+  const [statusInfo, setStatusInfo] = useState(getStatusInfo(-1));
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
-    return (
-        <Modal visible={visible} transparent={true} animationType="fade" onRequestClose={onClose}>
-            <View style={styles.modalBackdrop}>
-                <View style={styles.modalContainer}>
-                    <Text style={styles.modalTitle} numberOfLines={2}>{assignment.GroupName}</Text>
-                    <Text style={styles.modalSectionTitle}>Title</Text>
-                    <Text style={styles.modalDescription}>{cleanHtml(details?.ShortDescription)}</Text>
-                    <Text style={styles.modalSectionTitle}>Description</Text>
-                    {isLoadingDetails ? <ActivityIndicator color="#FFFFFF"/> :
-                      <FormattedText html={details?.LongDescription || "<i>No Description Provided</i>"} />
-                    }
-                    <View style={styles.modalSection}>
-                        <Text style={styles.modalSectionTitle} marginTop={20}>Status</Text>
-                        <Text style={[styles.modalStatusText, { color }]}>{status}</Text>
-                    </View>
+  // ✅ Sync on modal open or assignment data change
+  useEffect(() => {
+    if (!visible) return;
 
-                    <View style={styles.modalSection}>
-                        <Text style={styles.modalSectionTitle}>Grade</Text>
-                        {isLoadingDetails ? <ActivityIndicator color="#FFFFFF"/> :
-                         gradeInfo && gradeInfo.HasGrade === 1 ?
-                            <View>
-                                <Text style={styles.modalContentText}>
-                                    {gradeInfo.Grade || gradeInfo.GradebookGrade}{maxPoints ? ` / ${maxPoints}`: ''}
-                                </Text>
-                                {gradeInfo.GradedComment && 
-                                    <Text style={styles.modalCommentText}>{cleanHtml(gradeInfo.GradedComment)}</Text>
-                                }
-                            </View> :
-                            <Text style={styles.modalContentText}>Not Graded</Text>
-                        }
-                    </View>
-                    
-                    <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                        <Text style={styles.closeButtonText}>Close</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
-        </Modal>
+    const currentStatus =
+      typeof assignmentDetails?.AssignmentStatus === "number"
+        ? assignmentDetails.AssignmentStatus
+        : typeof assignment?.AssignmentStatusType === "number"
+        ? assignment.AssignmentStatusType
+        : -1;
+
+    setSelectedStatus(currentStatus);
+    setStatusInfo(getStatusInfo(currentStatus));
+  }, [visible, assignmentDetails, assignment]);
+
+  const cleanHtml = (str) =>
+    str?.replace(/<[^>]*>/g, "").replace(/&#160;/g, " ") || "";
+
+  const gradeInfo = details?.AssignmentGrade;
+  const maxPoints = details?.MaxPoints;
+  const isGraded =
+    selectedStatus === 4 || gradeInfo?.HasGrade === 1;
+
+  const handleSaveStatus = () => {
+    setShowStatusModal(false);
+    setIsUpdating(true);
+
+    // Instantly update the status visually (like the AssignmentCard)
+    const newInfo = getStatusInfo(selectedStatus);
+    setStatusInfo(newInfo);
+
+    postApiInWebView(
+      "https://miamicountryday.myschoolapp.com/api/assignment2/assignmentstatusupdate",
+      "ASSIGNMENT_STATUS_UPDATE",
+      {
+        assignmentIndexId: assignment?.AssignmentIndexId,
+        assignmentStatus: selectedStatus,
+      }
     );
+
+    // Refresh assignment data after delay
+    setTimeout(() => {
+      if (fetchAssignments) fetchAssignments();
+      if (fetchAssignmentDetails)
+        fetchAssignmentDetails(assignment.AssignmentIndexId);
+      setIsUpdating(false);
+    }, 1000);
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalContainer}>
+          {/* Header */}
+          <Text style={styles.modalTitle} numberOfLines={2}>
+            {assignment.GroupName}
+          </Text>
+
+          {/* Title */}
+          <Text style={styles.modalSectionTitle}>Title</Text>
+          <Text style={styles.modalDescription}>
+            {cleanHtml(details?.ShortDescription)}
+          </Text>
+
+          {/* Description */}
+          <Text style={styles.modalSectionTitle}>Description</Text>
+          {isLoadingDetails ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <ScrollView style={{ maxHeight: '160' }}>
+              <FormattedText
+                html={details?.LongDescription || "<i>No Description Provided</i>"}
+              />
+            </ScrollView>
+          )}
+
+          {/* 🔹 Current Status */}
+          <View style={styles.modalSection}>
+            <Text style={styles.modalSectionTitle} marginTop={20}>
+              Status
+            </Text>
+            <Text style={[styles.modalStatusText, { color: statusInfo.color }]}>
+              {statusInfo.status}
+            </Text>
+          </View>
+
+          {/* 🔹 Grade Info */}
+          <View style={styles.modalSection}>
+            <Text style={styles.modalSectionTitle}>Grade</Text>
+            {isLoadingDetails ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : gradeInfo?.HasGrade === 1 ? (
+              <View>
+                <Text style={styles.modalContentText}>
+                  {gradeInfo.Grade || gradeInfo.GradebookGrade}
+                  {maxPoints ? ` / ${maxPoints}` : ""}
+                </Text>
+                {gradeInfo.GradedComment && (
+                  <ScrollView style={{ maxHeight: '100' }}>
+                    <Text style={styles.modalCommentText}>
+                      {cleanHtml(gradeInfo.GradedComment)}
+                    </Text>
+                  </ScrollView>
+                )}
+              </View>
+            ) : (
+              <Text style={styles.modalContentText}>Not Graded</Text>
+            )}
+          </View>
+
+          {/* 🔹 Button to open popup */}
+          <View style={styles.modalSection}>
+            <Text style={styles.modalSectionTitle}>Assignment Status</Text>
+            <TouchableOpacity
+              style={[
+                styles.changeStatusButton,
+                isGraded && { opacity: 0.5 },
+              ]}
+              disabled={isGraded}
+              onPress={() => !isGraded && setShowStatusModal(true)}
+            >
+              <Text style={styles.changeStatusText}>
+                {isGraded
+                  ? "Status locked (graded)"
+                  : `Change Status (${statusInfo.status})`}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Loading indicator */}
+          {isUpdating && (
+            <Text
+              style={{
+                color: "#A0A0A0",
+                marginTop: 8,
+                textAlign: "center",
+              }}
+            >
+              Updating status...
+            </Text>
+          )}
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <Text style={styles.closeButtonText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* 🔹 Status selection popup */}
+      <Modal visible={showStatusModal} transparent animationType="fade">
+        <View style={styles.subModalBackdrop}>
+          <View style={styles.subModalContainer}>
+            <Text style={styles.subModalTitle}>Change Status</Text>
+
+            {[
+              { label: "To Do", value: -1 },
+              { label: "In Progress", value: 0 },
+              { label: "Complete", value: 1 },
+            ].map((opt) => (
+              <TouchableOpacity
+                key={opt.value}
+                style={styles.radioRow}
+                onPress={() => setSelectedStatus(opt.value)}
+              >
+                <View
+                  style={[
+                    styles.radioOuter,
+                    selectedStatus === opt.value && styles.radioOuterActive,
+                  ]}
+                >
+                  {selectedStatus === opt.value && (
+                    <View style={styles.radioInner} />
+                  )}
+                </View>
+                <Text style={styles.radioLabel}>{opt.label}</Text>
+              </TouchableOpacity>
+            ))}
+
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity style={styles.saveButton} onPress={handleSaveStatus}>
+                <Text style={styles.saveButtonText}>Save</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowStatusModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </Modal>
+  );
 };
 
 const getStatusInfo = (statusType) => {
@@ -805,15 +1141,180 @@ const ChangelogPage = ({ onClose }) => (
     </SafeAreaView>
 );
 
-const MessagesPage = ({ messages, fetchMessages, isLoading, onNavigateBack, selectedMessage, setSelectedMessage }) => {
+const MessagesPage = ({
+  messages,
+  fetchMessages,
+  isLoading,
+  onNavigateBack,
+  selectedMessage,
+  setSelectedMessage,
+  postApiInWebView,
+  fetchAllMessages,
+  fetchApiInWebView,
+  allRecipients,
+  setAllRecipients,
+}) => {
+  const [selecting, setSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [pageNumber, setPageNumber] = useState(1);
+
+  // --- Compose modal state ---
+  const [isComposing, setIsComposing] = useState(false);
+  const [recipientQuery, setRecipientQuery] = useState('');
+  const [selectedRecipients, setSelectedRecipients] = useState([]);
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const richRef = useRef();
+
   useEffect(() => {
-    if (!messages) fetchMessages();
-  }, []);
+    fetchMessages(pageNumber);
+  }, [pageNumber]);
+
+  const nextPage = () => setPageNumber((prev) => prev + 1);
+  const prevPage = () => setPageNumber((prev) => Math.max(1, prev - 1));
+
+  const idsOnPage = (messages || []).map((m) => m?.ConversationId || m?.Id).filter(Boolean);
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () =>
+    setSelectedIds(
+      selectedIds.size === idsOnPage.length ? new Set() : new Set(idsOnPage)
+    );
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const bulkMarkRead = (ids) => {
+    if (!ids?.length) return;
+    postApiInWebView(
+      'https://miamicountryday.myschoolapp.com/api/message/ConversationBulkUpdate/',
+      'MESSAGES_BULK_UPDATE',
+      { ids: ids.join(','), markAsRead: true }
+    );
+    setTimeout(() => {
+      clearSelection();
+      setSelecting(false);
+      fetchMessages(pageNumber);
+    }, 800);
+  };
+
+  // --- Filter recipients locally ---
+  const filteredRecipients = recipientQuery
+    ? allRecipients.filter(r =>
+        (r.name || '').toLowerCase().includes(recipientQuery.toLowerCase())
+      )
+    : [];
+
+
+  // --- Fetch all recipients once ---
+  const openComposer = () => {
+    Alert.alert("Warning: This feature may have bugs! Be sure to report any to franco.")
+    setIsComposing(true);
+    if (allRecipients.length === 0) {
+      fetchApiInWebView(
+        'https://miamicountryday.myschoolapp.com/api/message/getrecipients',
+        'FETCH_RECIPIENTS'
+      );
+    }
+  };
 
   return (
     <View style={styles.pageContentContainer}>
       <BackHeader title="Messages" onBack={onNavigateBack} />
 
+      {/* ─── Top Buttons ─── */}
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 10,
+          marginRight: 10,
+        }}
+      >
+        <TouchableOpacity
+          style={{
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            backgroundColor: '#0A84FF',
+            borderRadius: 8,
+            marginRight: 10,
+          }}
+          onPress={openComposer}
+        >
+          <Text style={{ color: '#FFF', fontWeight: '600' }}>New Message</Text>
+        </TouchableOpacity>
+
+        {!selecting ? (
+          <TouchableOpacity
+            style={{
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              backgroundColor: '#2C2C2E',
+              borderRadius: 8,
+            }}
+            onPress={() => setSelecting(true)}
+          >
+            <Text style={{ color: '#FFF', fontWeight: '600' }}>Select</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                backgroundColor: '#2C2C2E',
+                borderRadius: 8,
+              }}
+              onPress={() => {
+                setSelecting(false);
+                clearSelection();
+              }}
+            >
+              <Text style={{ color: '#FFF', fontWeight: '600' }}>Cancel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                backgroundColor: '#2C2C2E',
+                borderRadius: 8,
+              }}
+              onPress={selectAll}
+            >
+              <Text style={{ color: '#FFF', fontWeight: '600' }}>
+                {selectedIds.size === idsOnPage.length
+                  ? 'Deselect All'
+                  : 'Select All'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                backgroundColor: selectedIds.size ? '#0A84FF' : '#0A84FF55',
+                borderRadius: 8,
+              }}
+              disabled={!selectedIds.size}
+              onPress={() => bulkMarkRead(Array.from(selectedIds))}
+            >
+              <Text style={{ color: '#FFF', fontWeight: '600' }}>
+                Mark Read ({selectedIds.size})
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* ─── Message List ─── */}
       <ScrollView
         style={{ width: '100%' }}
         refreshControl={
@@ -826,26 +1327,63 @@ const MessagesPage = ({ messages, fetchMessages, isLoading, onNavigateBack, sele
       >
         {isLoading && !messages ? (
           <ActivityIndicator size="large" color="#FFFFFF" style={{ marginTop: 40 }} />
-        ) : messages && messages.length > 0 ? (
+        ) : messages?.length ? (
           messages.map((msg, index) => {
-            const latest = msg.Messages[0];
+            const latest = msg.Messages?.[0] || {};
+            const conversationId = msg.ConversationId || msg.Id;
+            const messageId = latest.Id;
             const sender = latest.FromUser?.UserNameFormatted || 'Unknown';
             const isUnread = latest?.ReadInd === false;
             const subject = msg.Subject || '(No Subject)';
-            const preview = latest.Body
-              ?.replace(/<[^>]+>/g, '')
-              ?.slice(0, 120)
-              ?.trim();
+            const preview =
+              latest.Body?.replace(/<[^>]+>/g, '')?.slice(0, 120)?.trim() || '';
+            const isSelected = selectedIds.has(conversationId);
 
             return (
               <TouchableOpacity
-                key={index}
+                key={conversationId || index}
                 style={[
                   styles.messageCard,
-                  isUnread && { backgroundColor: '#0A84FF22', borderLeftWidth: 3, borderLeftColor: '#0A84FF' },
+                  isUnread && {
+                    backgroundColor: '#0A84FF22',
+                    borderLeftWidth: 3,
+                    borderLeftColor: '#0A84FF',
+                  },
+                  selecting && isSelected && {
+                    borderWidth: 2,
+                    borderColor: '#0A84FF',
+                  },
                 ]}
-                onPress={() => setSelectedMessage(msg)}
+                onPress={() => {
+                  if (selecting) {
+                    toggleSelect(conversationId);
+                    return;
+                  }
+
+                  if (isUnread && messageId) {
+                    postApiInWebView(
+                      'https://miamicountryday.myschoolapp.com/api/message/markread',
+                      'MESSAGES_MARK_READ',
+                      { messageId }
+                    );
+                  }
+                  setSelectedMessage(msg);
+                  setTimeout(fetchMessages, 600);
+                }}
               >
+                {selecting && (
+                  <View
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 6,
+                      borderWidth: 2,
+                      borderColor: isSelected ? '#0A84FF' : '#8E8E93',
+                      backgroundColor: isSelected ? '#0A84FF' : 'transparent',
+                      marginBottom: 6,
+                    }}
+                  />
+                )}
                 <Text style={styles.messageSubject}>{subject}</Text>
                 <Text style={styles.messageSender}>{sender}</Text>
                 <Text style={styles.messagePreview}>{preview}...</Text>
@@ -857,6 +1395,192 @@ const MessagesPage = ({ messages, fetchMessages, isLoading, onNavigateBack, sele
         )}
       </ScrollView>
 
+      {!fetchAllMessages && (
+        <View style={styles.paginationContainer}>
+          <TouchableOpacity
+            onPress={prevPage}
+            disabled={pageNumber === 1}
+            style={[
+              styles.paginationButton,
+              pageNumber === 1 && styles.paginationButtonDisabled,
+            ]}
+          >
+            <Text style={styles.paginationButtonText}>◀ Prev</Text>
+          </TouchableOpacity>
+          <Text style={styles.paginationPageText}>Page {pageNumber}</Text>
+          <TouchableOpacity
+            onPress={nextPage}
+            style={[styles.paginationButton, styles.paginationButtonActive]}
+          >
+            <Text style={styles.paginationButtonText}>Next ▶</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ─── Compose Modal ─── */}
+      <Modal
+        visible={isComposing}
+        animationType="slide"
+        onRequestClose={() => setIsComposing(false)}
+        transparent
+      >
+      <TouchableWithoutFeedback
+        onPress={() => {
+          Keyboard.dismiss();
+          richRef.current?.blurContentEditor?.();
+        }}
+      >
+        <View style={styles.composeOverlay}>
+            <View style={styles.composeContainer}>
+              <ScrollView
+                contentContainerStyle={{ paddingBottom: 20 }}
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={styles.composeTitle}>Compose Message</Text>
+
+                {/* To Field */}
+                <TextInput
+                  placeholder="To"
+                  placeholderTextColor="#999"
+                  style={styles.composeInput}
+                  value={recipientQuery}
+                  onChangeText={setRecipientQuery}
+                />
+
+                {/* Autocomplete dropdown */}
+                {filteredRecipients.length > 0 && (
+                  <ScrollView style={styles.autocompleteList}>
+                    {filteredRecipients.map((r) => (
+                      <TouchableOpacity
+                        key={r.id}
+                        onPress={() => {
+                          setSelectedRecipients((prev) =>
+                            prev.some((p) => p.id === r.id) ? prev : [...prev, r]
+                          );
+                          setRecipientQuery('');
+                        }}
+                      >
+                        <Text style={styles.autocompleteItem}>{r.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+
+                {/* Selected recipients */}
+                {selectedRecipients.length > 0 && (
+                  <View style={styles.selectedRecipients}>
+                    {selectedRecipients.map((r) => (
+                      <Text key={r.id} style={styles.recipientChip}>
+                        {r.name}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+
+                {/* Subject */}
+                <TextInput
+                  placeholder="Subject"
+                  placeholderTextColor="#999"
+                  style={styles.composeInput}
+                  value={subject}
+                  onChangeText={setSubject}
+                />
+
+                <RichToolbar
+                  editor={richRef}
+                  actions={[
+                    actions.setBold,
+                    actions.setItalic,
+                    actions.setUnderline,
+                    actions.setStrikethrough,
+                    actions.insertBulletsList,
+                    actions.insertOrderedList,
+                    actions.insertLink,
+                  ]}
+                  style={styles.richToolbar}
+                  iconTint="#fff"
+                  selectedIconTint="#0A84FF"
+                />
+
+                {/* Message editor */}
+                <RichEditor
+                  ref={richRef}
+                  placeholder="Type your message..."
+                  initialContentHTML={body}
+                  onChange={setBody}
+                  editorStyle={{
+                    backgroundColor: '#2C2C2E',  // dark background
+                    color: '#FFFFFF',             // white text
+                    placeholderColor: '#8E8E93',  // subtle gray placeholder
+                    contentCSSText: `
+                      body {
+                        font-family: -apple-system;
+                        font-size: 15px;
+                        color: #FFFFFF;
+                        background-color: #2C2C2E;
+                        line-height: 1.5;
+                        padding: 10px;
+                      }
+                      a { color: #0A84FF; text-decoration: underline; }
+                      b, strong { color: #FFFFFF; }
+                      i, em { color: #D1D1D6; }
+                      u { text-decoration: underline; }
+                      span[style*="line-through"] { color: #A1A1A1; }
+                    `,
+                  }}
+                  style={{
+                    borderRadius: 10,
+                    minHeight: 150,
+                    maxHeight: 150,
+                    marginTop: 8,
+                  }}
+                />
+
+                {/* Action buttons */}
+                <View style={styles.composeActions}>
+                  <TouchableOpacity
+                    onPress={() => setIsComposing(false)}
+                    style={styles.cancelButton}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const participants = selectedRecipients.map((r) => ({
+                        AssociationId: String(r.associationId),
+                        Pk: String(r.userId),
+                        MembersToInclude: '0',
+                        Name: r.name,
+                      }));
+                      const payload = {
+                        Participants: participants,
+                        Messages: [{ Body: body, Status: 2, FromSelf: false }],
+                        ReplyToAll: false,
+                        Subject: subject,
+                        ParticipantList: participants.map((p) => p.Name).join(', '),
+                      };
+                      postApiInWebView(
+                        'https://miamicountryday.myschoolapp.com/api/message/conversation/?format=json',
+                        'SEND_MESSAGE',
+                        payload
+                      );
+                      setIsComposing(false);
+                      setSubject('');
+                      setBody('');
+                      setSelectedRecipients([]);
+                      fetchMessages();
+                    }}
+                    style={styles.sendButton}
+                  >
+                    <Text style={styles.sendButtonText}>Send</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+        </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
       <MessageDetailModal
         visible={!!selectedMessage}
         message={selectedMessage}
@@ -865,6 +1589,7 @@ const MessagesPage = ({ messages, fetchMessages, isLoading, onNavigateBack, sele
     </View>
   );
 };
+
 
 const ClickGamePage = ({ onNavigateBack, userInfo }) => {
   const [score, setScore] = useState(0);
@@ -1303,6 +2028,7 @@ const MessageDetailModal = ({ visible, message, onClose }) => {
   const sender = latest.FromUser?.UserNameFormatted || 'Unknown';
   const photoUrl = `${BASE_URL}${latest.FromUser?.ProfilePhoto?.LargeFilenameEditedUrl}`;
   const sendDate = latest.SendDate;
+  const msgId = latest.MessageId;
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -1367,7 +2093,7 @@ const GradesPage = ({ userInfo, grades, fetchGrades, fetchGradeDetails, isLoadin
       totalWeighted += gpa + weightBonus;
       count++;
     });
-
+    
     return {
       weighted: (totalWeighted / count).toFixed(2),
       unweighted: (totalUnweighted / count).toFixed(2),
@@ -1375,6 +2101,11 @@ const GradesPage = ({ userInfo, grades, fetchGrades, fetchGradeDetails, isLoadin
   };
 
   const { weighted, unweighted } = calculateGPA();
+
+  const reloadGrades = () => {
+    calculateGPA();
+    fetchGrades();
+  };
 
   // --- Render ---
   return (
@@ -1400,7 +2131,7 @@ const GradesPage = ({ userInfo, grades, fetchGrades, fetchGradeDetails, isLoadin
         refreshControl={
           <RefreshControl
             refreshing={isLoading}
-            onRefresh={fetchGrades}
+            onRefresh={() => reloadGrades()}
             tintColor="#FFFFFF"
           />
         }
@@ -1474,10 +2205,9 @@ const GradeDetailsModal = ({ visible, details, onClose }) => {
                     {items.map((a) => (
                       <View key={a.AssignmentId} style={styles.assignmentRow}>
                         <View style={styles.assignmentRowHeader}>
-                          <Text style={styles.assignmentRowTitle}>{a.Assignment || 'Untitled'}</Text>
+                          <Text style={styles.assignmentRowTitle}>{a.AssignmentShortDescription || 'Untitled'}</Text>
                           <Text style={styles.assignmentRowScore}>{a.Points}/{a.MaxPoints}</Text>
                         </View>
-                          <FormattedText html={a.AssignmentShortDescription} />
                           {a.Comment ? <FormattedText html={a.Comment} /> : null}
                         <View style={styles.assignmentDivider}/>
                       </View>
@@ -1493,9 +2223,16 @@ const GradeDetailsModal = ({ visible, details, onClose }) => {
   );
 };
 
-const SettingsPage = ({ onNavigateBack, backgroundUri, blurAmount, setBackgroundUri, setBlurAmount }) => {
+const SettingsPage = ({ onNavigateBack, backgroundUri, blurAmount, setBackgroundUri, setFetchAllMessages, fetchAllMessages, setBlurAmount }) => {
   const [localBackgroundUri, setLocalBackgroundUri] = useState(null);
   const [localBlurAmount, setLocalBlurAmount] = useState(0);
+
+  const onToggleFetchAll = async (value) => {
+    try {
+      setFetchAllMessages(value);                 // <- updates UI immediately
+      await AsyncStorage.setItem('fetchAllMessages', String(value)); // persist
+    } catch {}
+  };
 
   useEffect(() => {
     (async () => {
@@ -1571,7 +2308,7 @@ const SettingsPage = ({ onNavigateBack, backgroundUri, blurAmount, setBackground
       <BackHeader title="Settings" onBack={onNavigateBack} />
 
       <ScrollView style={{ width: '100%' }}>
-        <Text style={styles.pageTitle}>Background</Text>
+        <Text style={styles.settingsCardTitle}>Background</Text>
 
         <View style={styles.settingsCard}>
           <Text style={styles.settingsCardSubtitle}>Choose a custom background image</Text>
@@ -1591,8 +2328,8 @@ const SettingsPage = ({ onNavigateBack, backgroundUri, blurAmount, setBackground
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.pageTitle}>Background Blur</Text>
         <View style={styles.settingsCard}>
+          <Text style={styles.backHeaderTitle}>Background Blur</Text>
           <Slider
             minimumValue={0}
             maximumValue={20}
@@ -1606,10 +2343,41 @@ const SettingsPage = ({ onNavigateBack, backgroundUri, blurAmount, setBackground
           <Text style={styles.blurLabel}>Blur: {blurAmount}</Text>
         </View>
 
-        <Text style={styles.pageTitle}>Clicker Specials</Text>
-        <View style={styles.settingsCard}>
-          <Text style={styles.settingsCardSubtitle}>Coming soon...</Text>
-        </View>
+        <Text style={styles.settingsCardTitle}>Expiremental</Text>
+          <View style={styles.settingsCard} pointerEvents="auto">
+            <Text style={styles.settingsCardSubtitle}>Fetch all messages at once</Text>
+              <Switch
+                value={fetchAllMessages}
+                onValueChange={async (val) => {
+                  if (val) {
+                    Alert.alert(
+                      'Warning',
+                      'Fetching all messages at once may take longer to load and use more data, but it can be usefull for marking large amounts as read and more.',
+                      [
+                        {
+                          text: 'Cancel',
+                          style: 'cancel',
+                          onPress: () => {}, // do nothing, don’t toggle
+                        },
+                        {
+                          text: 'Continue',
+                          style: 'default',
+                          onPress: async () => {
+                            setFetchAllMessages(true);
+                            await AsyncStorage.setItem('fetchAllMessages', 'true');
+                          },
+                        },
+                      ]
+                    );
+                  } else {
+                    setFetchAllMessages(false);
+                    await AsyncStorage.setItem('fetchAllMessages', 'false');
+                  }
+                }}
+                trackColor={{ false: '#2C2C2E', true: '#0A84FF' }}
+                thumbColor="#FFF"
+              />
+          </View>
       </ScrollView>
     </View>
   );
@@ -1692,7 +2460,7 @@ const styles = StyleSheet.create({
   scheduleCourseTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', marginBottom: 4},
   scheduleSubText: { color: '#8E8E93', fontSize: 14 },
   scheduleBlock: { padding: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#3A3A3C'},
-  scheduleBlockText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  scheduleBlockText: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold' },
   weekNavigator: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingVertical: 10, marginBottom: 10 },
   weekNavButton: { padding: 10 },
   weekNavText: { color: '#007AFF', fontSize: 16 },
@@ -1703,6 +2471,21 @@ const styles = StyleSheet.create({
   assignmentStatus: { fontSize: 12, fontWeight: '700' },
   assignmentDesc: { color: '#E5E5EA', fontSize: 15, marginBottom: 12 },
   assignmentDue: { color: '#8E8E93', fontSize: 12 },
+  changeStatusButton:{backgroundColor:'#1C1C1E',paddingVertical:10,paddingHorizontal:15,borderRadius:10,marginTop:8,borderWidth:1,borderColor:'#3A3A3C'},
+  changeStatusText:{color:'#FFFFFF',fontSize:16,textAlign:'center'},
+  subModalBackdrop:{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'rgba(0,0,0,0.6)'},
+  subModalContainer:{backgroundColor:'#2C2C2E',padding:20,borderRadius:16,width:'85%',alignItems:'stretch'},
+  subModalTitle:{fontSize:18,fontWeight:'700',color:'#FFFFFF',marginBottom:15,textAlign:'center'},
+  radioRow:{flexDirection:'row',alignItems:'center',marginVertical:6},
+  radioOuter:{width:22,height:22,borderRadius:11,borderWidth:2,borderColor:'#A0A0A0',justifyContent:'center',alignItems:'center',marginRight:10},
+  radioOuterActive:{borderColor:'#007AFF'},
+  radioInner:{width:10,height:10,borderRadius:5,backgroundColor:'#007AFF'},
+  radioLabel:{color:'#FFFFFF',fontSize:16},
+  modalButtonRow:{flexDirection:'row',justifyContent:'space-around',marginTop:20},
+  saveButton:{backgroundColor:'#007AFF',paddingVertical:10,paddingHorizontal:20,borderRadius:8},
+  saveButtonText:{color:'#FFFFFF',fontWeight:'600',fontSize:16},
+  cancelButton:{backgroundColor:'#3A3A3C',paddingVertical:10,paddingHorizontal:20,borderRadius:8},
+  cancelButtonText:{color:'#FFFFFF',fontWeight:'600',fontSize:16},
   noAssignmentsText: { color: '#8E8E93', textAlign: 'center', marginTop: 40, fontSize: 16},
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
   modalContainer: { backgroundColor: '#2C2C2E', borderRadius: 14, padding: 20, width: '90%', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 5 },
@@ -1748,7 +2531,7 @@ const styles = StyleSheet.create({
   gradeGroupInfo: { color: '#8E8E93', fontSize: 14, marginTop: 4 },
   gradeAssignmentsList: { marginTop: 10 },
   assignmentRow: { marginBottom: 10 },
-  assignmentRowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  assignmentRowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 3},
   assignmentRowTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '600', flex: 1, marginRight: 10 },
   assignmentRowScore: { color: '#34C759', fontSize: 15, fontWeight: 'bold' },
   assignmentRowDesc: { color: '#E5E5EA', fontSize: 14, marginTop: 4 },
@@ -1759,8 +2542,8 @@ const styles = StyleSheet.create({
   backArrow: { color: '#007AFF', fontSize: 18, fontWeight: '600' },
   backText: { color: '#007AFF', fontSize: 16, fontWeight: '600' },
   backHeaderTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', textAlign: 'center', flex: 1 },
-  skipButton: { backgroundColor:"#007AFF", borderRadius:12, position: 'absolute', right: 18, top: 10, padding: 15, },
-  skipText: { color:'#FFFFFF', fontSize:16, fontWeight:'600' },
+  skipButton: { position: 'absolute', right: 10, top: 10, padding: 15 },
+  skipText: { color: '#007AFF', fontSize: 16, fontWeight: '600' },
   messageCard: { backgroundColor: '#2C2C2E', borderRadius: 12, padding: 15, marginBottom: 15, width: '100%', },
   messageSubject: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
   messageSender: { color: '#8E8E93', fontSize: 14, marginTop: 4 },
@@ -1770,6 +2553,30 @@ const styles = StyleSheet.create({
   messageSenderFull: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
   messageDate: { color: '#8E8E93', fontSize: 13 },
   messageSubjectFull: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
+  paginationContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 10, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#2C2C2E', gap: 12 },
+  paginationButton: { backgroundColor: '#2C2C2E', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8 },
+  paginationButtonActive: { backgroundColor: '#2C2C2E55' },
+  paginationButtonDisabled: { backgroundColor: '#2C2C2E55' },
+  paginationButtonText: { color: '#FFF', fontWeight: '600', fontSize: 15 },
+  paginationPageText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+  composeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  composeContainer: { backgroundColor: '#1C1C1E', borderRadius: 16, width: '92%',  padding: 16 },
+  composeTitle: { color: '#fff', fontSize: 20, fontWeight: '600', marginBottom: 10 },
+  composeInput: { backgroundColor: '#2C2C2E', color: '#fff', borderRadius: 8, padding: 10, marginVertical: 6 },
+  autocompleteList: { backgroundColor: '#2C2C2E', borderRadius: 8, marginBottom: 6, maxHeight: 150 },
+  autocompleteItem: { color: '#fff', padding: 8, borderBottomColor: '#3A3A3C', borderBottomWidth: 1 },
+  selectedRecipients: { flexDirection: 'row', flexWrap: 'wrap', marginVertical: 6 },
+  recipientChip: { backgroundColor: '#0A84FF33', color: '#fff', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4, margin: 2 },
+  richEditor: { borderWidth: 1, borderColor: '#444', borderRadius: 8, minHeight: 150, marginTop: 8 },
+  richToolbar: { backgroundColor: '#2C2C2E', borderRadius: 8, marginTop: 8 },
+  composeActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 },
+  cancelButton: { padding: 10, backgroundColor: '#2C2C2E', borderRadius: 8, width: '48%', alignItems: 'center' },
+  cancelButtonText: { color: '#fff', fontWeight: '600' },
+  sendButton: { padding: 10, backgroundColor: '#0A84FF', borderRadius: 8, width: '48%', alignItems: 'center' },
+  sendButtonText: { color: '#fff', fontWeight: '600' },
+  formatBar: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 },
+  formatButton: { backgroundColor: '#2C2C2E', borderRadius: 6, padding: 6, margin: 4 },
+  formatButtonText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
   clickCircleContainer: { marginTop: 50, alignItems: 'center', justifyContent: 'center', width: '100%' },
   clickButton: { width: 180, height: 180, borderRadius: 90, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center', },
   clickText: { color: '#FFFFFF', fontSize: 26, fontWeight: 'bold' },
@@ -1791,7 +2598,7 @@ const styles = StyleSheet.create({
   devInput: { backgroundColor: '#2C2C2E', color: '#FFF', borderRadius: 8, padding: 10, width: '100%', marginVertical: 6, fontSize: 16, },
   blurLabel: { color: '#FFFFFF', fontSize: 16, marginTop: 8, textAlign: 'center' },
   settingsCard:{backgroundColor:'#2C2C2E',borderRadius:12,padding:15,marginBottom:15,width:'100%'},
-  settingsCardTitle:{color:'#FFFFFF',fontSize:18,fontWeight:'bold',marginBottom:4},
+  settingsCardTitle:{color:'#FFFFFF',fontSize:28,fontWeight:'bold',marginBottom:4},
   settingsCardSubtitle:{color:'#8E8E93',fontSize:14,marginBottom:10},
   colorRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingVertical:12,borderBottomWidth:1,borderColor:'#3A3A3C'},
   colorLabel:{color:'#FFFFFF',fontSize:16,flex:1},
@@ -1800,7 +2607,10 @@ const styles = StyleSheet.create({
   previewImage:{width:'100%',height:180,borderRadius:10,marginTop:10,resizeMode:'cover'},
   previewPlaceholder:{width:'100%',height:180,borderRadius:10,backgroundColor:'#3A3A3C',alignItems:'center',justifyContent:'center',marginTop:10},
   placeholderText:{color:'#8E8E93',fontSize:16},
-  blurLabel:{color:'#A0A0A0',fontSize:15,textAlign:'center',marginTop:8}
+  blurLabel:{color:'#A0A0A0',fontSize:15,textAlign:'center',marginTop:8},
+  autocompleteWrapper: {position: 'absolute',top: 45,left: 0,right: 0,zIndex: 9999,backgroundColor: '#1C1C1E', borderRadius: 6,maxHeight: 200,borderWidth: 1,borderColor: '#2C2C2E',shadowColor: '#000',shadowOffset: { width: 0, height: 4 },shadowOpacity: 0.3,shadowRadius: 4,elevation: 10,},
+  autocompleteList: {paddingVertical: 4,},
+  autocompleteItem: {paddingVertical: 8,paddingHorizontal: 10,color: '#FFF',borderBottomWidth: 1,borderBottomColor: '#2C2C2E',},
 
 });
 
