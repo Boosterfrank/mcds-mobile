@@ -531,13 +531,6 @@ const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
 
       {/* Main app content is only displayed on top when fully logged in */}
       {authStatus === 'LOGGED_IN' && userInfo && (
-      <TouchableWithoutFeedback
-        onPress={() => {
-          Keyboard.dismiss();
-          if (richRef?.current) richRef.current.blurContentEditor?.(); // handles RichEditor
-        }}
-        accessible={false} // ensures taps still go through to children
-      >
         <View style={{flex: 1}}>
           <SafeAreaView/>
             <View style={styles.appHeader}>
@@ -593,7 +586,6 @@ const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
                 <SafeAreaView style={{backgroundColor: styles.navBar.backgroundColor}} edges={['bottom']} />
             </View>
         </View>
-        </TouchableWithoutFeedback>
       )}
       </PaperProvider>
     </ImageBackground>
@@ -1578,7 +1570,6 @@ const MessagesPage = ({
               </ScrollView>
             </View>
         </View>
-        </TouchableWithoutFeedback>
       </Modal>
 
       <MessageDetailModal
