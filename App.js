@@ -1570,6 +1570,7 @@ const MessagesPage = ({
               </ScrollView>
             </View>
         </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       <MessageDetailModal
