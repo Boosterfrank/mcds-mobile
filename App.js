@@ -57,9 +57,10 @@ const GRADE_DETAILS_API_URL = `${BASE_URL}/api/gradebook/AssignmentPerformanceSt
 const MESSAGES_API_URL = `${BASE_URL}/api/message/inbox/?format=json`;
 const APP_HOME_URL_FRAGMENT = '/app/';
 
-const APP_VERSION = '1.7.7'; 
+const APP_VERSION = '1.7.8'; 
 
 const CHANGELOG_DATA = [
+    { version: '1.7.8', changes: ['Fixed gpa not bieng accurate', 'other bug fixes'] },
     { version: '1.7.7', changes: ['Added change assignment status', 'Added ability to send POST requests to the server', 'Added the ability to send messages', 'Lots of bug fixes'] },
     { version: '1.7.6', changes: ['Fixed cicker saving too much', 'Added custom app backgrounds', 'Added dark/tinted icons'] },
     { version: '1.7.5', changes: ['Added shop for clicker','added useless tips'] },
@@ -121,6 +122,21 @@ const App = () => {
       `);
     }
   };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const savedUri = await AsyncStorage.getItem('userBackground');
+        const savedBlur = await AsyncStorage.getItem('userBlur');
+
+        if (savedUri) setBackgroundUri(savedUri);
+        if (savedBlur) setBlurAmount(parseFloat(savedBlur));
+      } catch (err) {
+        console.warn('Failed to load background settings:', err);
+      }
+    })();
+  }, []);
+
 
   useEffect(() => {
     (async () => {
@@ -2070,27 +2086,42 @@ const GradesPage = ({ userInfo, grades, fetchGrades, fetchGradeDetails, isLoadin
       const grade = parseFloat(course.cumgrade);
       if (isNaN(grade)) return;
 
-      let gpa = 0;
-      if (grade >= 90) gpa = 4.0;
-      else if (grade >= 80) gpa = 3.0;
-      else if (grade >= 70) gpa = 2.0;
-      else if (grade >= 60) gpa = 1.0;
-      else gpa = 0.0;
-
       const isHonors = course.sectionidentifier?.includes('- H');
       const isAP = course.sectionidentifier?.includes('- AP');
-      const weightBonus = isAP ? 1.0 : isHonors ? 0.5 : 0.0;
 
-      totalUnweighted += gpa;
-      totalWeighted += gpa + weightBonus;
+      // accurate GPA scale
+      let gpaCP = 0, gpaHonors = 0, gpaAP = 0;
+
+      if (grade >= 97) [gpaCP, gpaHonors, gpaAP] = [4.3, 4.8, 5.3];
+      else if (grade >= 93) [gpaCP, gpaHonors, gpaAP] = [4.0, 4.5, 5.0];
+      else if (grade >= 90) [gpaCP, gpaHonors, gpaAP] = [3.7, 4.2, 4.7];
+      else if (grade >= 87) [gpaCP, gpaHonors, gpaAP] = [3.3, 3.8, 4.3];
+      else if (grade >= 83) [gpaCP, gpaHonors, gpaAP] = [3.0, 3.5, 4.0];
+      else if (grade >= 80) [gpaCP, gpaHonors, gpaAP] = [2.7, 3.2, 3.7];
+      else if (grade >= 77) [gpaCP, gpaHonors, gpaAP] = [2.3, 2.8, 3.3];
+      else if (grade >= 73) [gpaCP, gpaHonors, gpaAP] = [2.0, 2.5, 3.0];
+      else if (grade >= 70) [gpaCP, gpaHonors, gpaAP] = [1.7, 2.2, 2.7];
+      else if (grade >= 67) [gpaCP, gpaHonors, gpaAP] = [1.3, 1.8, 2.3];
+      else if (grade >= 63) [gpaCP, gpaHonors, gpaAP] = [1.0, 1.5, 2.0];
+      else if (grade >= 60) [gpaCP, gpaHonors, gpaAP] = [0.7, 1.2, 1.7];
+      else [gpaCP, gpaHonors, gpaAP] = [0, 0, 0];
+
+      totalUnweighted += gpaCP;
+
+      let weightedGPA = gpaCP;
+      if (isHonors) weightedGPA = gpaHonors;
+      if (isAP) weightedGPA = gpaAP;
+
+      totalWeighted += weightedGPA;
       count++;
     });
-    
+
     return {
       weighted: (totalWeighted / count).toFixed(2),
       unweighted: (totalUnweighted / count).toFixed(2),
     };
   };
+
 
   const { weighted, unweighted } = calculateGPA();
 
