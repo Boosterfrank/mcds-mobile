@@ -404,7 +404,7 @@ const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
 
   const fetchGradesCallback = useCallback(() => {
     if (!userInfo) return;
-    const url = `${GRADES_API_URL}?userId=${userInfo.UserId}&memberLevel=3&persona=2&durationList=172112`;
+    const url = `${GRADES_API_URL}?userId=${userInfo.UserId}&memberLevel=3&persona=2&durationList=172113`;
     fetchApiInWebView(url, 'GRADES');
   }, [userInfo]);
 
