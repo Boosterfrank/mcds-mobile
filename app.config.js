@@ -14,7 +14,7 @@ module.exports = ({ config }) => {
     newArchEnabled: true,
 
     ios: {
-      supportsTablet: false,
+      supportsTablet: true,
       bundleIdentifier: "dev.quanticoic.mcds",
 
       // iOS icon appearances
@@ -26,18 +26,6 @@ module.exports = ({ config }) => {
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false
       }
-    },
-
-    android: {
-      adaptiveIcon: {
-        foregroundImage: "./assets/adaptive-icon.png",
-        backgroundColor: "#ffffff"
-      },
-      edgeToEdgeEnabled: true
-    },
-
-    web: {
-      favicon: "./assets/favicon.png"
     },
 
     extra: {
