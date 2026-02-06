@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,6 @@ import {
   TextInput,
   Modal,
   Switch,
-  Dimensions,
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
@@ -57,35 +56,35 @@ const GRADE_DETAILS_API_URL = `${BASE_URL}/api/gradebook/AssignmentPerformanceSt
 const MESSAGES_API_URL = `${BASE_URL}/api/message/inbox/?format=json`;
 const APP_HOME_URL_FRAGMENT = '/app/';
 
-const APP_VERSION = '1.7.8'; 
+const APP_VERSION = '1.7.8';
 
 const CHANGELOG_DATA = [
-    { version: '1.7.8', changes: ['Fixed gpa not bieng accurate', 'other bug fixes'] },
-    { version: '1.7.7', changes: ['Added change assignment status', 'Added ability to send POST requests to the server', 'Added the ability to send messages', 'Lots of bug fixes'] },
-    { version: '1.7.6', changes: ['Fixed cicker saving too much', 'Added custom app backgrounds', 'Added dark/tinted icons'] },
-    { version: '1.7.5', changes: ['Added shop for clicker','added useless tips'] },
-    { version: '1.7.5', changes: ['Fixed score not saving correctly','fixed webview offset'] },
-    { version: '1.7.4', changes: ['Added Messages Page', 'also added clicker game cuz I got bored and why not'] },
-    { version: '1.7.3', changes: ['Added text Formatting and styling for descriptions, etc.'] },
-    { version: '1.7.2', changes: ['Added preview mode'] },
-    { version: '1.7.1', changes: ['Added Grades page', 'Added GPA calculator (Grades)', 'Added Back button', 'Fixed login crash'] },
-    { version: '1.7.0', changes: ['Added UpdateCheck', 'Fixed assignment description not loading', 'Added pull down to refresh'] },
-    { version: '1.6.9', changes: ['Added the Resources page for easy accses to announcements and more', 'Added more user info such as email and graduation year', 'Fixed assignments before last week not loading in', 'Added ability to copy email'] },
-    { version: '1.6.8', changes: ['Fixed app name not showing on iOS'] },
-    { version: '1.6.7', changes: ['Fixed ReferenceError for assignment details.', 'SIX SEVEN!!!'] },
-    { version: '1.6.6', changes: ['Added secret changelog page', 'Fixed bottom safe area layout', 'Fixed home page text centering', 'Updated to `react-native-safe-area-context`'] },
-    { version: '1.6.5', changes: ['Removed assignment status update functionality due to constant bugs.'] },
-    { version: '1.6.4', changes: ['Restored the persistent hidden WebView logic to fix API calls for assignments and schedule.'] },
-    { version: '1.6.3', changes: ['Fixed SafeAreaView layout to remove top/bottom gaps.', 'Centered version info on More page.', 'Added full changelog history.'] },
-    { version: '1.6.2', changes: ['Added secret changelog page (long-press).', 'Updated to `react-native-safe-area-context`.'] },
-    { version: '1.5.0', changes: ['Added functional Schedule page with daily navigation.'] },
-    { version: '1.4.0', changes: ['Restored stable URL-detection login logic.', 'Added interactive Assignment Detail modal & status updates.'] },
+  { version: '1.7.8', changes: ['Fixed gpa not bieng accurate', 'other bug fixes'] },
+  { version: '1.7.7', changes: ['Added change assignment status', 'Added ability to send POST requests to the server', 'Added the ability to send messages', 'Lots of bug fixes'] },
+  { version: '1.7.6', changes: ['Fixed cicker saving too much', 'Added custom app backgrounds', 'Added dark/tinted icons'] },
+  { version: '1.7.5', changes: ['Added shop for clicker', 'added useless tips'] },
+  { version: '1.7.5', changes: ['Fixed score not saving correctly', 'fixed webview offset'] },
+  { version: '1.7.4', changes: ['Added Messages Page', 'also added clicker game cuz I got bored and why not'] },
+  { version: '1.7.3', changes: ['Added text Formatting and styling for descriptions, etc.'] },
+  { version: '1.7.2', changes: ['Added preview mode'] },
+  { version: '1.7.1', changes: ['Added Grades page', 'Added GPA calculator (Grades)', 'Added Back button', 'Fixed login crash'] },
+  { version: '1.7.0', changes: ['Added UpdateCheck', 'Fixed assignment description not loading', 'Added pull down to refresh'] },
+  { version: '1.6.9', changes: ['Added the Resources page for easy accses to announcements and more', 'Added more user info such as email and graduation year', 'Fixed assignments before last week not loading in', 'Added ability to copy email'] },
+  { version: '1.6.8', changes: ['Fixed app name not showing on iOS'] },
+  { version: '1.6.7', changes: ['Fixed ReferenceError for assignment details.', 'SIX SEVEN!!!'] },
+  { version: '1.6.6', changes: ['Added secret changelog page', 'Fixed bottom safe area layout', 'Fixed home page text centering', 'Updated to `react-native-safe-area-context`'] },
+  { version: '1.6.5', changes: ['Removed assignment status update functionality due to constant bugs.'] },
+  { version: '1.6.4', changes: ['Restored the persistent hidden WebView logic to fix API calls for assignments and schedule.'] },
+  { version: '1.6.3', changes: ['Fixed SafeAreaView layout to remove top/bottom gaps.', 'Centered version info on More page.', 'Added full changelog history.'] },
+  { version: '1.6.2', changes: ['Added secret changelog page (long-press).', 'Updated to `react-native-safe-area-context`.'] },
+  { version: '1.5.0', changes: ['Added functional Schedule page with daily navigation.'] },
+  { version: '1.4.0', changes: ['Restored stable URL-detection login logic.', 'Added interactive Assignment Detail modal & status updates.'] },
 ];
 
 const AppWrapper = () => (
-    <SafeAreaProvider>
-        <App />
-    </SafeAreaProvider>
+  <SafeAreaProvider>
+    <App />
+  </SafeAreaProvider>
 );
 
 const App = () => {
@@ -224,13 +223,13 @@ const App = () => {
     webviewRef.current?.injectJavaScript(script);
   };
 
-const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
-  if (!csrfToken) {
-    console.warn('[POST DEBUG] Missing CSRF token — aborting.');
-    return;
-  }
+  const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
+    if (!csrfToken) {
+      console.warn('[POST DEBUG] Missing CSRF token — aborting.');
+      return;
+    }
 
-  const debugScript = `
+    const debugScript = `
     console.log('[POST DEBUG] Sending POST to: ${url}');
     console.log('[POST DEBUG] Body:', ${JSON.stringify(body)});
     console.log('[POST DEBUG] Token:', '${csrfToken}');
@@ -266,9 +265,9 @@ const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
     true;
   `;
 
-  console.log('[WebView POST]', type, url, body);
-  webviewRef.current?.injectJavaScript(debugScript);
-};
+    console.log('[WebView POST]', type, url, body);
+    webviewRef.current?.injectJavaScript(debugScript);
+  };
 
   useEffect(() => {
     if (authStatus === 'LOGGED_IN') {
@@ -279,33 +278,33 @@ const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
 
   const handleWebViewMessage = (event) => {
     try {
-    const message = JSON.parse(event.nativeEvent.data);
+      const message = JSON.parse(event.nativeEvent.data);
 
-    if (message.type === 'CSRF_TOKEN') {
-      setCsrfToken(message.data?.replace(/"/g, '').trim());
-      console.log('[CSRF TOKEN SAVED]', message.data);
-      return; // stop here, don’t parse further
-    }
+      if (message.type === 'CSRF_TOKEN') {
+        setCsrfToken(message.data?.replace(/"/g, '').trim());
+        console.log('[CSRF TOKEN SAVED]', message.data);
+        return; // stop here, don’t parse further
+      }
 
-    const triggerRelogin = (reason) => {
-      setIsLoading(false);
-      setUserInfo(null);
-      setAssignments(null);
-      setSchedule({});
-      setAuthStatus('LOGGED_OUT');
-      setLoginReason(reason);
-      console.log('[Relogin] Triggered.');
-      setIsReloginMode(true);
-      setIsLoggedIn(false);
-      clearSessionCookies();
-      resetWebViewToBase();  // only this first redirect
-    };
+      const triggerRelogin = (reason) => {
+        setIsLoading(false);
+        setUserInfo(null);
+        setAssignments(null);
+        setSchedule({});
+        setAuthStatus('LOGGED_OUT');
+        setLoginReason(reason);
+        console.log('[Relogin] Triggered.');
+        setIsReloginMode(true);
+        setIsLoggedIn(false);
+        clearSessionCookies();
+        resetWebViewToBase();  // only this first redirect
+      };
 
-    if (message.type === 'API_ERROR') {
-      triggerRelogin(`API Error: ${message.error}. Please sign in.`);
-      return;
-    }
-      
+      if (message.type === 'API_ERROR') {
+        triggerRelogin(`API Error: ${message.error}. Please sign in.`);
+        return;
+      }
+
       if (message.success) {
         // console.log('[POST RESPONSE]', message.status, message.data);
         let responseData;
@@ -313,22 +312,22 @@ const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
         catch (e) { triggerRelogin('Failed to parse a server response. Please sign in again.'); return; }
 
         if (responseData.Error) { triggerRelogin('Your session has expired. Please sign in again.'); return; }
-        
+
         if (message.type === 'CONTEXT') {
           setUserInfo(responseData.UserInfo);
-          setAuthStatus('LOGGED_IN'); 
+          setAuthStatus('LOGGED_IN');
         } else if (message.type === 'ASSIGNMENTS') {
           setAssignments(responseData);
         } else if (message.type === 'STATUS_UPDATE') {
           fetchApiInWebView(ASSIGNMENTS_API_URL, 'ASSIGNMENTS');
         } else if (message.type === 'SCHEDULE') {
-            const dateMatch = message.requestUrl.match(/scheduleDate=([\d%F]+)/);
-            if (dateMatch) {
-                const dateKey = decodeURIComponent(dateMatch[1]);
-                setSchedule(prev => ({...prev, [dateKey]: responseData}));
-            }
+          const dateMatch = message.requestUrl.match(/scheduleDate=([\d%F]+)/);
+          if (dateMatch) {
+            const dateKey = decodeURIComponent(dateMatch[1]);
+            setSchedule(prev => ({ ...prev, [dateKey]: responseData }));
+          }
         } else if (message.type === 'ASSIGNMENT_DETAIL') {
-            setAssignmentDetails(prev => ({...prev, [responseData.AssignmentIndexId]: responseData}));
+          setAssignmentDetails(prev => ({ ...prev, [responseData.AssignmentIndexId]: responseData }));
         }
         else if (message.type === 'GRADES') {
           setGrades(responseData);
@@ -375,21 +374,21 @@ const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
       setAuthStatus('LOGGING_IN');
     }
   };
-  
+
   useEffect(() => {
     if (authStatus === 'LOGGING_IN' && !userInfo) {
-       fetchApiInWebView(CONTEXT_API_URL, 'CONTEXT');
+      fetchApiInWebView(CONTEXT_API_URL, 'CONTEXT');
     }
   }, [authStatus]);
-  
+
   const fetchAssignmentsCallback = useCallback(() => {
     fetchApiInWebView(ASSIGNMENTS_API_URL, 'ASSIGNMENTS');
   }, []);
 
-  
+
   const fetchScheduleCallback = useCallback((dateString) => {
-      const url = `${SCHEDULE_API_URL}?scheduleDate=${encodeURIComponent(dateString)}&personaId=2`;
-      if (!schedule[dateString]) fetchApiInWebView(url, 'SCHEDULE');
+    const url = `${SCHEDULE_API_URL}?scheduleDate=${encodeURIComponent(dateString)}&personaId=2`;
+    if (!schedule[dateString]) fetchApiInWebView(url, 'SCHEDULE');
   }, []);
 
   const fetchAssignmentDetailsCallback = useCallback((assignmentIndexId) => {
@@ -454,56 +453,56 @@ const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
   }, []);
 
   useEffect(() => {
-  if (previewMode) {
-    console.log('[PreviewMode] Activating Preview Data');
-    setUserInfo({
-      FirstName: 'User',
-      LastName: 'Preview',
-      Email: 'upreview29@miamicountryday.org',
-      StudentInfo: { GradYear: '2030' },
-    });
+    if (previewMode) {
+      console.log('[PreviewMode] Activating Preview Data');
+      setUserInfo({
+        FirstName: 'User',
+        LastName: 'Preview',
+        Email: 'upreview29@miamicountryday.org',
+        StudentInfo: { GradYear: '2030' },
+      });
 
-    setAssignments({
-      DueToday: [
-        { 
-          AssignmentIndexId: 1, 
-          GroupName: 'Mathematics - H', 
-          ShortDescription: 'Algebra Worksheet', 
-          LongDescription: "Good evening Upper School,&nbsp;\u003Cbr\u003EI'm excited to announce that I am hosting another \u003Cb\u003EFishing Competition\u003C/b\u003E on \u003Cb\u003EFisher Island\u003C/b\u003E on \u003Cb\u003ENovember 16 from 10am-12pm\u003C/b\u003E!&nbsp;\u003Cbr\u003E\u003Cbr\u003EThe last one was such a success and it was so nice to see your support.&nbsp;\u003Cbr\u003EYou can earn \u003Cb\u003E10 service hours\u003C/b\u003E by coming to the event. All you have to do is \u003Cb\u003Eregister\u003C/b\u003E by zelleing \u003Cb\u003Elena@bigdreamscf.org\u003C/b\u003E $100 and sending me the confirmation at 786 847 3178.&nbsp;\u003Cbr\u003E\u003Cbr\u003EThe purpose of the event is to continue to raise money to \u003Cb\u003Ereopen the operating room\u003C/b\u003E at Clinica Santa Rosa De Lima. I am visiting the clinic in November over Thanksgiving Break and want to raise the most money I can before my trip there. I am super excited to donate the \u003Cb\u003Efirst 10k\u003C/b\u003E that you all helped me raise.&nbsp;\u003Cbr\u003E\u003Cbr\u003EI hope to see you at the fishing competition. Reach out if you have any questions.&nbsp",
-          DateDue: '10/08/2025 11:59 PM', 
-          AssignmentStatusType: 0 
-        },
-      ],
-      PastThisWeek: [],
-      PastBeforeLastWeek: [],
-      PastLastWeek: [],
-      Overdue: [],
-      DueTomorrow: [],
-      DueThisWeek: [],
-      DueNextWeek: [],
-      DueAfterNextWeek: [],
-    });
+      setAssignments({
+        DueToday: [
+          {
+            AssignmentIndexId: 1,
+            GroupName: 'Mathematics - H',
+            ShortDescription: 'Algebra Worksheet',
+            LongDescription: "Good evening Upper School,&nbsp;\u003Cbr\u003EI'm excited to announce that I am hosting another \u003Cb\u003EFishing Competition\u003C/b\u003E on \u003Cb\u003EFisher Island\u003C/b\u003E on \u003Cb\u003ENovember 16 from 10am-12pm\u003C/b\u003E!&nbsp;\u003Cbr\u003E\u003Cbr\u003EThe last one was such a success and it was so nice to see your support.&nbsp;\u003Cbr\u003EYou can earn \u003Cb\u003E10 service hours\u003C/b\u003E by coming to the event. All you have to do is \u003Cb\u003Eregister\u003C/b\u003E by zelleing \u003Cb\u003Elena@bigdreamscf.org\u003C/b\u003E $100 and sending me the confirmation at 786 847 3178.&nbsp;\u003Cbr\u003E\u003Cbr\u003EThe purpose of the event is to continue to raise money to \u003Cb\u003Ereopen the operating room\u003C/b\u003E at Clinica Santa Rosa De Lima. I am visiting the clinic in November over Thanksgiving Break and want to raise the most money I can before my trip there. I am super excited to donate the \u003Cb\u003Efirst 10k\u003C/b\u003E that you all helped me raise.&nbsp;\u003Cbr\u003E\u003Cbr\u003EI hope to see you at the fishing competition. Reach out if you have any questions.&nbsp",
+            DateDue: '10/08/2025 11:59 PM',
+            AssignmentStatusType: 0
+          },
+        ],
+        PastThisWeek: [],
+        PastBeforeLastWeek: [],
+        PastLastWeek: [],
+        Overdue: [],
+        DueTomorrow: [],
+        DueThisWeek: [],
+        DueNextWeek: [],
+        DueAfterNextWeek: [],
+      });
 
-    setSchedule({
-      '10/07/2025': [
-        { 
-          CourseTitle: 'Preview Science', 
-          Contact: 'Dr. Smith', 
-          MyDayStartTime: '10:00 AM', 
-          MyDayEndTime: '11:00 AM', 
-          BuildingName: 'Science Center', 
-          RoomNumber: '201', 
-          Block: 'B' 
-        },
-      ]
-    });
+      setSchedule({
+        '10/07/2025': [
+          {
+            CourseTitle: 'Preview Science',
+            Contact: 'Dr. Smith',
+            MyDayStartTime: '10:00 AM',
+            MyDayEndTime: '11:00 AM',
+            BuildingName: 'Science Center',
+            RoomNumber: '201',
+            Block: 'B'
+          },
+        ]
+      });
 
-    setGrades([
-      { sectionidentifier: 'Biology - AP', cumgrade: 95, groupownername: 'Mr. Turner', room: 'Lab 1', currentterm: 'Q1', sectionid: 1, markingperiodid: 123 },
-      { sectionidentifier: 'Algebra II - H', cumgrade: 92, groupownername: 'Ms. Rivera', room: 'A103', currentterm: 'Q1', sectionid: 2, markingperiodid: 123 },
-    ]);
-  }
-}, [previewMode]);
+      setGrades([
+        { sectionidentifier: 'Biology - AP', cumgrade: 95, groupownername: 'Mr. Turner', room: 'Lab 1', currentterm: 'Q1', sectionid: 1, markingperiodid: 123 },
+        { sectionidentifier: 'Algebra II - H', cumgrade: 92, groupownername: 'Ms. Rivera', room: 'A103', currentterm: 'Q1', sectionid: 2, markingperiodid: 123 },
+      ]);
+    }
+  }, [previewMode]);
 
 
   return (
@@ -512,19 +511,19 @@ const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
       style={styles.appContainer}
       resizeMode="cover"
     >
-    <PaperProvider>
-      {blurAmount > 0 && (
-        <BlurView intensity={blurAmount * 5} style={StyleSheet.absoluteFill} pointerEvents="none"/>
-      )}
+      <PaperProvider>
+        {blurAmount > 0 && (
+          <BlurView intensity={blurAmount * 5} style={StyleSheet.absoluteFill} pointerEvents="none" />
+        )}
 
-      <StatusBar barStyle={authStatus === 'LOGGED_IN' ? "light-content" : "dark-content"} />
-      <Modal visible={isChangelogVisible} animationType="slide">
-        <ChangelogPage onClose={() => setIsChangelogVisible(false)} />
-      </Modal>
+        <StatusBar barStyle={authStatus === 'LOGGED_IN' ? "light-content" : "dark-content"} />
+        <Modal visible={isChangelogVisible} animationType="slide">
+          <ChangelogPage onClose={() => setIsChangelogVisible(false)} />
+        </Modal>
 
-      {/* Persistent WebView is always rendered. It's hidden with styling when logged in. */}
-      <View style={authStatus === 'LOGGED_IN' ? styles.webviewHidden : styles.webviewVisible}>
-        <SafeAreaView style={{flex: 1, backgroundColor: '#FFFFFF'}}>
+        {/* Persistent WebView is always rendered. It's hidden with styling when logged in. */}
+        <View style={authStatus === 'LOGGED_IN' ? styles.webviewHidden : styles.webviewVisible}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
             <View style={styles.loginHeader}>
               <Text style={styles.loginTitle}>MCDS Mobile</Text>
               {authStatus === 'LOGGED_OUT' && <Text style={styles.subtitle}>{loginReason}</Text>}
@@ -533,24 +532,24 @@ const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
               </TouchableOpacity>
             </View>
             <WebView
-                ref={webviewRef}
-                source={{ uri: LOGIN_URL }}
-                onMessage={handleWebViewMessage}
-                onNavigationStateChange={handleNavigationStateChange}
-                sharedCookiesEnabled={true}
-                thirdPartyCookiesEnabled={true}
-                originWhitelist={['*']}
+              ref={webviewRef}
+              source={{ uri: LOGIN_URL }}
+              onMessage={handleWebViewMessage}
+              onNavigationStateChange={handleNavigationStateChange}
+              sharedCookiesEnabled={true}
+              thirdPartyCookiesEnabled={true}
+              originWhitelist={['*']}
             />
             {authStatus === 'LOGGING_IN' && <LoadingOverlay text="Verifying session..." />}
-        </SafeAreaView>
-      </View>
+          </SafeAreaView>
+        </View>
 
-      {/* Main app content is only displayed on top when fully logged in */}
-      {authStatus === 'LOGGED_IN' && userInfo && (
-        <View style={{flex: 1}}>
-          <SafeAreaView/>
+        {/* Main app content is only displayed on top when fully logged in */}
+        {authStatus === 'LOGGED_IN' && userInfo && (
+          <View style={{ flex: 1 }}>
+            <SafeAreaView />
             <View style={styles.appHeader}>
-                <Text style={styles.appTitle}>MCDS Mobile</Text>
+              <Text style={styles.appTitle}>MCDS Mobile</Text>
             </View>
 
             {previewMode && (
@@ -561,9 +560,9 @@ const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
               </View>
             )}
 
-            <PageContent 
-              activePage={activePage} 
-              userInfo={userInfo} 
+            <PageContent
+              activePage={activePage}
+              userInfo={userInfo}
               assignments={assignments}
               fetchAssignments={fetchAssignmentsCallback}
               schedule={schedule}
@@ -597,12 +596,12 @@ const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
               details={selectedCourseDetails}
               onClose={() => setSelectedCourseDetails(null)}
             />
-            <View style={{backgroundColor: styles.navBar.backgroundColor}}>
-                <BottomNavBar activePage={activePage} onNavigate={setActivePage} />
-                <SafeAreaView style={{backgroundColor: styles.navBar.backgroundColor}} edges={['bottom']} />
+            <View style={{ backgroundColor: styles.navBar.backgroundColor }}>
+              <BottomNavBar activePage={activePage} onNavigate={setActivePage} />
+              <SafeAreaView style={{ backgroundColor: styles.navBar.backgroundColor }} edges={['bottom']} />
             </View>
-        </View>
-      )}
+          </View>
+        )}
       </PaperProvider>
     </ImageBackground>
   );
@@ -621,81 +620,81 @@ const BackHeader = ({ title, onBack }) => (
 
 // --- Page Content Wrapper with Transitions ---
 const PageContent = ({ activePage, userInfo, richRef, assignments, postApiInWebView, fetchAllMessages, setFetchAllMessages, fetchAssignments, assignmentDetails, fetchAssignmentDetails, schedule, fetchSchedule, isLoading, onOpenChangelog, onNavigate, grades, fetchGrades, fetchGradeDetails, messages, fetchMessages, selectedMessage, setSelectedMessage, backgroundUri, blurAmount, setBackgroundUri, setBlurAmount, fetchApiInWebView, setAllRecipients, allRecipients }) => {
-    const fadeAnim = useRef(new Animated.Value(0)).current;
-    useEffect(() => {
-        fadeAnim.setValue(0);
-        Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
-    }, [activePage]);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    fadeAnim.setValue(0);
+    Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+  }, [activePage]);
 
-    let currentPageComponent;
-    switch (activePage) {
-        case 'Home': currentPageComponent = <HomePage userInfo={userInfo} />; break;
-        case 'Assignments': currentPageComponent = <AssignmentCenterPage postApiInWebView={postApiInWebView} assignments={assignments} fetchAssignments={fetchAssignments} isLoading={isLoading} assignmentDetails={assignmentDetails} fetchAssignmentDetails={fetchAssignmentDetails} />; break;
-        case 'Schedule': currentPageComponent = <SchedulePage scheduleData={schedule} fetchSchedule={fetchSchedule} isLoading={isLoading} />; break;
-        case 'More':
-          currentPageComponent = (
-            <MorePage onOpenChangelog={onOpenChangelog} onNavigate={onNavigate} />
-          );
-        break;
-        case 'Grades':
-          currentPageComponent = (
-            <GradesPage 
-              userInfo={userInfo}
-              onNavigateBack={() => onNavigate('More')}
-              grades={grades} 
-              fetchGrades={fetchGrades} 
-              fetchGradeDetails={fetchGradeDetails} 
-              isLoading={isLoading} 
-            />
-          );
-        break;
-        case 'Messages':
-          currentPageComponent = (
-          <MessagesPage
-            messages={messages}
-            fetchMessages={fetchMessages}
-            selectedMessage={selectedMessage}
-            setSelectedMessage={setSelectedMessage}
-            isLoading={isLoading}
-            onNavigateBack={() => onNavigate('More')}
-            postApiInWebView={postApiInWebView}
-            fetchAllMessages={fetchAllMessages}
-            fetchApiInWebView={fetchApiInWebView}
-            setAllRecipients={setAllRecipients}
-            allRecipients={allRecipients}
-          />
-          );
-        break;
-        case 'ClickGame':
-          currentPageComponent = (
-            <ClickGamePage 
-            userInfo={userInfo} 
-            onNavigateBack={() => onNavigate('More')} 
-            />
-          );
-        break;
-        case 'Settings':
-          currentPageComponent = (
-            <SettingsPage
-              onNavigateBack={() => onNavigate('More')}
-              backgroundUri={backgroundUri}
-              blurAmount={blurAmount}
-              setBackgroundUri={setBackgroundUri}
-              setBlurAmount={setBlurAmount}
-              fetchAllMessages={fetchAllMessages}
-              setFetchAllMessages={setFetchAllMessages}
-            />
-          );
-        break;
-        case 'Resources':
-          currentPageComponent = (
-            <ResourcesPage onNavigateBack={() => onNavigate('More')} />
-          );
-        break;
-        default: currentPageComponent = <PlaceholderPage title="Not Found" onNavigateBack={() => onNavigate('More')} />;
-    }
+  let currentPageComponent;
+  switch (activePage) {
+    case 'Home': currentPageComponent = <HomePage userInfo={userInfo} />; break;
+    case 'Assignments': currentPageComponent = <AssignmentCenterPage postApiInWebView={postApiInWebView} assignments={assignments} fetchAssignments={fetchAssignments} isLoading={isLoading} assignmentDetails={assignmentDetails} fetchAssignmentDetails={fetchAssignmentDetails} />; break;
+    case 'Schedule': currentPageComponent = <SchedulePage scheduleData={schedule} fetchSchedule={fetchSchedule} isLoading={isLoading} />; break;
+    case 'More':
+      currentPageComponent = (
+        <MorePage onOpenChangelog={onOpenChangelog} onNavigate={onNavigate} />
+      );
+      break;
+    case 'Grades':
+      currentPageComponent = (
+        <GradesPage
+          userInfo={userInfo}
+          onNavigateBack={() => onNavigate('More')}
+          grades={grades}
+          fetchGrades={fetchGrades}
+          fetchGradeDetails={fetchGradeDetails}
+          isLoading={isLoading}
+        />
+      );
+      break;
+    case 'Messages':
+      currentPageComponent = (
+        <MessagesPage
+          messages={messages}
+          fetchMessages={fetchMessages}
+          selectedMessage={selectedMessage}
+          setSelectedMessage={setSelectedMessage}
+          isLoading={isLoading}
+          onNavigateBack={() => onNavigate('More')}
+          postApiInWebView={postApiInWebView}
+          fetchAllMessages={fetchAllMessages}
+          fetchApiInWebView={fetchApiInWebView}
+          setAllRecipients={setAllRecipients}
+          allRecipients={allRecipients}
+        />
+      );
+      break;
+    case 'ClickGame':
+      currentPageComponent = (
+        <ClickGamePage
+          userInfo={userInfo}
+          onNavigateBack={() => onNavigate('More')}
+        />
+      );
+      break;
+    case 'Settings':
+      currentPageComponent = (
+        <SettingsPage
+          onNavigateBack={() => onNavigate('More')}
+          backgroundUri={backgroundUri}
+          blurAmount={blurAmount}
+          setBackgroundUri={setBackgroundUri}
+          setBlurAmount={setBlurAmount}
+          fetchAllMessages={fetchAllMessages}
+          setFetchAllMessages={setFetchAllMessages}
+        />
+      );
+      break;
+    case 'Resources':
+      currentPageComponent = (
+        <ResourcesPage onNavigateBack={() => onNavigate('More')} />
+      );
+      break;
+    default: currentPageComponent = <PlaceholderPage title="Not Found" onNavigateBack={() => onNavigate('More')} />;
+  }
 
-    return <Animated.View style={[styles.mainContent, { opacity: fadeAnim }]}>{currentPageComponent}</Animated.View>;
+  return <Animated.View style={[styles.mainContent, { opacity: fadeAnim }]}>{currentPageComponent}</Animated.View>;
 };
 
 // --- Components ---
@@ -705,10 +704,10 @@ const HomePage = ({ userInfo }) => {
   return (
     <View style={[styles.pageContentContainer, { justifyContent: 'center' }]}>
       <Text style={styles.greeting}>Hey, {userInfo.FirstName}!</Text>
-       {userInfo.ProfilePhoto?.LargeFilenameEditedUrl ? (
-        <Image source={{ uri: photoUrl }} style={styles.profileImage}/>
+      {userInfo.ProfilePhoto?.LargeFilenameEditedUrl ? (
+        <Image source={{ uri: photoUrl }} style={styles.profileImage} />
       ) : (
-         <View style={[styles.profileImage, styles.profileImagePlaceholder]}><Text style={styles.profileImagePlaceholderText}>{userInfo.FirstName.charAt(0)}</Text></View>
+        <View style={[styles.profileImage, styles.profileImagePlaceholder]}><Text style={styles.profileImagePlaceholderText}>{userInfo.FirstName.charAt(0)}</Text></View>
       )}
       <View style={styles.emailRow}>
         <TouchableOpacity
@@ -730,154 +729,154 @@ const HomePage = ({ userInfo }) => {
 };
 
 const SchedulePage = ({ scheduleData, fetchSchedule, isLoading }) => {
-    const [currentDate, setCurrentDate] = useState(moment());
-    const dateKey = currentDate.format('M/D/YYYY');
-    const scheduleForDay = scheduleData[dateKey];
-    useEffect(() => { if (!scheduleData[dateKey]) fetchSchedule(dateKey); }, [currentDate]);
-    const changeDay = (amount) => setCurrentDate(prev => prev.clone().add(amount, 'day'));
-    const courseColors = useRef({}).current;
-    const getColorForCourse = (courseTitle) => {
-        if (courseColors[courseTitle]) return courseColors[courseTitle];
-        const colors = ['#007AFF', '#34C759', '#AF52DE', '#FF9500', '#FF3B30', '#5AC8FA', '#FFCC00'];
-        const hash = courseTitle.split('').reduce((acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
-        courseColors[courseTitle] = colors[Math.abs(hash) % colors.length];
-        return courseColors[courseTitle];
-    };
-    return (
-        <View style={[styles.pageContentContainer, styles.placeholderAlignment]}>
-            <Text style={styles.pageTitle}>My Schedule</Text>
-            <View style={styles.dateNavigator}>
-                <TouchableOpacity onPress={() => changeDay(-1)} style={styles.dateNavButton}><Text style={styles.dateNavText}>{'< Prev'}</Text></TouchableOpacity>
-                <TouchableOpacity onPress={() => setCurrentDate(moment())}><Text style={styles.dateHeaderText}>{currentDate.isSame(moment(), 'day') ? 'Today' : currentDate.format('ddd, MMM D')}</Text></TouchableOpacity>
-                <TouchableOpacity onPress={() => changeDay(1)} style={styles.dateNavButton}><Text style={styles.dateNavText}>{'Next >'}</Text></TouchableOpacity>
+  const [currentDate, setCurrentDate] = useState(moment());
+  const dateKey = currentDate.format('M/D/YYYY');
+  const scheduleForDay = scheduleData[dateKey];
+  useEffect(() => { if (!scheduleData[dateKey]) fetchSchedule(dateKey); }, [currentDate]);
+  const changeDay = (amount) => setCurrentDate(prev => prev.clone().add(amount, 'day'));
+  const courseColors = useRef({}).current;
+  const getColorForCourse = (courseTitle) => {
+    if (courseColors[courseTitle]) return courseColors[courseTitle];
+    const colors = ['#007AFF', '#34C759', '#AF52DE', '#FF9500', '#FF3B30', '#5AC8FA', '#FFCC00'];
+    const hash = courseTitle.split('').reduce((acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
+    courseColors[courseTitle] = colors[Math.abs(hash) % colors.length];
+    return courseColors[courseTitle];
+  };
+  return (
+    <View style={[styles.pageContentContainer, styles.placeholderAlignment]}>
+      <Text style={styles.pageTitle}>My Schedule</Text>
+      <View style={styles.dateNavigator}>
+        <TouchableOpacity onPress={() => changeDay(-1)} style={styles.dateNavButton}><Text style={styles.dateNavText}>{'< Prev'}</Text></TouchableOpacity>
+        <TouchableOpacity onPress={() => setCurrentDate(moment())}><Text style={styles.dateHeaderText}>{currentDate.isSame(moment(), 'day') ? 'Today' : currentDate.format('ddd, MMM D')}</Text></TouchableOpacity>
+        <TouchableOpacity onPress={() => changeDay(1)} style={styles.dateNavButton}><Text style={styles.dateNavText}>{'Next >'}</Text></TouchableOpacity>
+      </View>
+      <ScrollView
+        style={{ width: '100%' }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={() => fetchSchedule(currentDate.format('M/D/YYYY'))}
+            tintColor="#FFFFFF"
+          />
+        }
+      >
+        {isLoading && !scheduleForDay ? (
+          <ActivityIndicator size="large" color="#FFFFFF" style={{ marginTop: 40 }} />
+        ) : scheduleForDay && scheduleForDay.length > 0 ? (
+          scheduleForDay.map((item, index) => (
+            <View key={index} style={styles.scheduleCard}>
+              <View style={[styles.scheduleColorBar, { backgroundColor: getColorForCourse(item.CourseTitle) }]} />
+              <View style={styles.scheduleTime}>
+                <Text style={styles.scheduleTimeText}>{item.MyDayStartTime}</Text>
+                <Text style={styles.scheduleTimeText}>{item.MyDayEndTime}</Text>
+              </View>
+              <View style={styles.scheduleDetails}>
+                <Text style={styles.scheduleCourseTitle}>{item.CourseTitle}</Text>
+                <Text style={styles.scheduleSubText}>{item.Contact}</Text>
+                <Text style={styles.scheduleSubText}>
+                  {item.BuildingName} - {item.RoomNumber}
+                </Text>
+              </View>
+              <View style={styles.scheduleBlock}>
+                <Text style={styles.scheduleBlockText}>{item.Block}</Text>
+              </View>
             </View>
-          <ScrollView
-            style={{ width: '100%' }}
-            refreshControl={
-              <RefreshControl
-                refreshing={isLoading}
-                onRefresh={() => fetchSchedule(currentDate.format('M/D/YYYY'))}
-                tintColor="#FFFFFF"
-              />
-            }
-          >
-            {isLoading && !scheduleForDay ? (
-              <ActivityIndicator size="large" color="#FFFFFF" style={{ marginTop: 40 }} />
-            ) : scheduleForDay && scheduleForDay.length > 0 ? (
-              scheduleForDay.map((item, index) => (
-                <View key={index} style={styles.scheduleCard}>
-                  <View style={[styles.scheduleColorBar, { backgroundColor: getColorForCourse(item.CourseTitle) }]} />
-                  <View style={styles.scheduleTime}>
-                    <Text style={styles.scheduleTimeText}>{item.MyDayStartTime}</Text>
-                    <Text style={styles.scheduleTimeText}>{item.MyDayEndTime}</Text>
-                  </View>
-                  <View style={styles.scheduleDetails}>
-                    <Text style={styles.scheduleCourseTitle}>{item.CourseTitle}</Text>
-                    <Text style={styles.scheduleSubText}>{item.Contact}</Text>
-                    <Text style={styles.scheduleSubText}>
-                      {item.BuildingName} - {item.RoomNumber}
-                    </Text>
-                  </View>
-                  <View style={styles.scheduleBlock}>
-                    <Text style={styles.scheduleBlockText}>{item.Block}</Text>
-                  </View>
-                </View>
-              ))
-            ) : (
-              <Text style={styles.noAssignmentsText}>No classes scheduled for this day.</Text>
-            )}
-          </ScrollView>
-        </View>
-    );
+          ))
+        ) : (
+          <Text style={styles.noAssignmentsText}>No classes scheduled for this day.</Text>
+        )}
+      </ScrollView>
+    </View>
+  );
 };
 
 const AssignmentCenterPage = ({ assignments, fetchAssignments, setAssignments, postApiInWebView, updateStatus, isLoading, assignmentDetails, fetchAssignmentDetails }) => {
-    const [weekOffset, setWeekOffset] = useState(0);
-    const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedAssignment, setSelectedAssignment] = useState(null);
 
-    useEffect(() => {
-        if (!assignments) {
-            fetchAssignments();
-        }
-    }, []);
-
-    const handleSelectAssignment = (assignment) => {
-        setSelectedAssignment(assignment);
-        // Fetch details if we don't have them already
-        if (!assignmentDetails[assignment.AssignmentIndexId]) {
-            fetchAssignmentDetails(assignment.AssignmentIndexId);
-        }
-    };
-
-    const handleStatusUpdate = (newStatus) => {
-        if (selectedAssignment) {
-            updateStatus(selectedAssignment.AssignmentIndexId, newStatus);
-        }
-        setSelectedAssignment(null); // Close modal
-    };
-
-    if (isLoading && !assignments) {
-        return <View style={styles.pageContentContainer}><ActivityIndicator size="large" color="#FFFFFF" /><Text style={styles.pageContentText}>Loading Assignments...</Text></View>;
+  useEffect(() => {
+    if (!assignments) {
+      fetchAssignments();
     }
-    
-    const allAssignments = assignments ? [...assignments.PastBeforeLastWeek, ...assignments.PastLastWeek, ...assignments.PastThisWeek, ...assignments.Overdue, ...assignments.DueToday, ...assignments.DueTomorrow, ...assignments.DueThisWeek, ...assignments.DueNextWeek, ...assignments.DueAfterNextWeek] : [];
-    
-    const today = moment().add(weekOffset, 'weeks');
-    const startOfWeek = today.clone().startOf('week');
-    const endOfWeek = today.clone().endOf('week');
+  }, []);
 
-    const filteredAssignments = allAssignments
-        .filter(a => moment(a.DateDue, "M/D/YYYY h:mm A").isBetween(startOfWeek, endOfWeek))
-        .sort((a, b) => new Date(a.DateDue) - new Date(b.DateDue));
-        
-    return (
-        <View style={[styles.pageContentContainer, styles.placeholderAlignment]}>
-          <AssignmentDetailModal 
-            postApiInWebView={postApiInWebView}
-            visible={!!selectedAssignment} 
-            assignment={selectedAssignment}
-            details={selectedAssignment ? assignmentDetails[selectedAssignment.AssignmentIndexId] : null}
-            isLoadingDetails={selectedAssignment && !assignmentDetails[selectedAssignment.AssignmentIndexId]}
-            onClose={() => setSelectedAssignment(null)}
-            fetchAssignments={fetchAssignments}   // 🔹 Added
-            fetchAssignmentDetails={fetchAssignmentDetails} // optional
+  const handleSelectAssignment = (assignment) => {
+    setSelectedAssignment(assignment);
+    // Fetch details if we don't have them already
+    if (!assignmentDetails[assignment.AssignmentIndexId]) {
+      fetchAssignmentDetails(assignment.AssignmentIndexId);
+    }
+  };
+
+  const handleStatusUpdate = (newStatus) => {
+    if (selectedAssignment) {
+      updateStatus(selectedAssignment.AssignmentIndexId, newStatus);
+    }
+    setSelectedAssignment(null); // Close modal
+  };
+
+  if (isLoading && !assignments) {
+    return <View style={styles.pageContentContainer}><ActivityIndicator size="large" color="#FFFFFF" /><Text style={styles.pageContentText}>Loading Assignments...</Text></View>;
+  }
+
+  const allAssignments = assignments ? [...assignments.PastBeforeLastWeek, ...assignments.PastLastWeek, ...assignments.PastThisWeek, ...assignments.Overdue, ...assignments.DueToday, ...assignments.DueTomorrow, ...assignments.DueThisWeek, ...assignments.DueNextWeek, ...assignments.DueAfterNextWeek] : [];
+
+  const today = moment().add(weekOffset, 'weeks');
+  const startOfWeek = today.clone().startOf('week');
+  const endOfWeek = today.clone().endOf('week');
+
+  const filteredAssignments = allAssignments
+    .filter(a => moment(a.DateDue, "M/D/YYYY h:mm A").isBetween(startOfWeek, endOfWeek))
+    .sort((a, b) => new Date(a.DateDue) - new Date(b.DateDue));
+
+  return (
+    <View style={[styles.pageContentContainer, styles.placeholderAlignment]}>
+      <AssignmentDetailModal
+        postApiInWebView={postApiInWebView}
+        visible={!!selectedAssignment}
+        assignment={selectedAssignment}
+        details={selectedAssignment ? assignmentDetails[selectedAssignment.AssignmentIndexId] : null}
+        isLoadingDetails={selectedAssignment && !assignmentDetails[selectedAssignment.AssignmentIndexId]}
+        onClose={() => setSelectedAssignment(null)}
+        fetchAssignments={fetchAssignments}   // 🔹 Added
+        fetchAssignmentDetails={fetchAssignmentDetails} // optional
+      />
+      <Text style={styles.pageTitle}>Assignment Center</Text>
+      <View style={styles.weekNavigator}>
+        <TouchableOpacity onPress={() => setWeekOffset(weekOffset - 1)} style={styles.weekNavButton}><Text style={styles.weekNavText}>{'< Prev'}</Text></TouchableOpacity>
+        <Text style={styles.weekHeaderText}>{startOfWeek.format('MMM D')} - {endOfWeek.format('MMM D, YYYY')}</Text>
+        <TouchableOpacity onPress={() => setWeekOffset(weekOffset + 1)} style={styles.weekNavButton}><Text style={styles.weekNavText}>{'Next >'}</Text></TouchableOpacity>
+      </View>
+      <ScrollView
+        style={{ width: '100%' }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={fetchAssignments}
+            tintColor='#FFFFFF'
           />
-            <Text style={styles.pageTitle}>Assignment Center</Text>
-            <View style={styles.weekNavigator}>
-                <TouchableOpacity onPress={() => setWeekOffset(weekOffset - 1)} style={styles.weekNavButton}><Text style={styles.weekNavText}>{'< Prev'}</Text></TouchableOpacity>
-                <Text style={styles.weekHeaderText}>{startOfWeek.format('MMM D')} - {endOfWeek.format('MMM D, YYYY')}</Text>
-                <TouchableOpacity onPress={() => setWeekOffset(weekOffset + 1)} style={styles.weekNavButton}><Text style={styles.weekNavText}>{'Next >'}</Text></TouchableOpacity>
-            </View>
-          <ScrollView
-            style={{ width: '100%' }}
-            refreshControl={
-              <RefreshControl
-                refreshing={isLoading}
-                onRefresh={fetchAssignments}
-                tintColor='#FFFFFF'
-              />
-            }
-          >
-            {filteredAssignments.length > 0 ? (
-              filteredAssignments.map(item => (
-                <AssignmentCard
-                  key={item.AssignmentIndexId}
-                  assignment={item}
-                  onSelect={() => handleSelectAssignment(item)}
-                />
-              ))
-            ) : (
-              <Text style={styles.noAssignmentsText}>No assignments due this week.</Text>
-            )}
-          </ScrollView>
-        </View>
-    );
+        }
+      >
+        {filteredAssignments.length > 0 ? (
+          filteredAssignments.map(item => (
+            <AssignmentCard
+              key={item.AssignmentIndexId}
+              assignment={item}
+              onSelect={() => handleSelectAssignment(item)}
+            />
+          ))
+        ) : (
+          <Text style={styles.noAssignmentsText}>No assignments due this week.</Text>
+        )}
+      </ScrollView>
+    </View>
+  );
 };
 
 const AssignmentCard = ({ assignment, onSelect }) => {
-    const { status, color } = getStatusInfo(assignment.AssignmentStatusType);
-    const cleanHtml = (str) => str?.replace(/<[^>]*>/g, '').replace(/&#160;/g, ' ') || '';
-    return (<TouchableOpacity onPress={onSelect} style={styles.assignmentCard}><View style={styles.assignmentHeader}><Text style={styles.assignmentClass} numberOfLines={1}>{assignment.GroupName}</Text><Text style={[styles.assignmentStatus, { color }]}>{status}</Text></View><Text style={styles.assignmentDesc}><FormattedText html={assignment.ShortDescription} /></Text><Text style={styles.assignmentDue}>Due: {moment(assignment.DateDue, "M/D/YYYY h:mm A").format('ddd, MMM D [at] h:mm A')}</Text></TouchableOpacity>);
+  const { status, color } = getStatusInfo(assignment.AssignmentStatusType);
+  const cleanHtml = (str) => str?.replace(/<[^>]*>/g, '').replace(/&#160;/g, ' ') || '';
+  return (<TouchableOpacity onPress={onSelect} style={styles.assignmentCard}><View style={styles.assignmentHeader}><Text style={styles.assignmentClass} numberOfLines={1}>{assignment.GroupName}</Text><Text style={[styles.assignmentStatus, { color }]}>{status}</Text></View><Text style={styles.assignmentDesc}><FormattedText html={assignment.ShortDescription} /></Text><Text style={styles.assignmentDue}>Due: {moment(assignment.DateDue, "M/D/YYYY h:mm A").format('ddd, MMM D [at] h:mm A')}</Text></TouchableOpacity>);
 };
 
 const AssignmentDetailModal = ({
@@ -906,8 +905,8 @@ const AssignmentDetailModal = ({
       typeof assignmentDetails?.AssignmentStatus === "number"
         ? assignmentDetails.AssignmentStatus
         : typeof assignment?.AssignmentStatusType === "number"
-        ? assignment.AssignmentStatusType
-        : -1;
+          ? assignment.AssignmentStatusType
+          : -1;
 
     setSelectedStatus(currentStatus);
     setStatusInfo(getStatusInfo(currentStatus));
@@ -1040,7 +1039,7 @@ const AssignmentDetailModal = ({
             </Text>
           )}
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Text style={styles.closeButtonText}>Close</Text>
+            <Text style={styles.closeButtonText}>Close</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1094,13 +1093,13 @@ const AssignmentDetailModal = ({
 };
 
 const getStatusInfo = (statusType) => {
-    switch (statusType) {
-        case -1: return { status: 'To Do', color: '#8E8E93' };
-        case 0: return { status: 'In Progress', color: '#007AFF' };
-        case 1: return { status: 'Complete', color: '#34C759' };
-        case 4: return { status: 'Graded', color: '#AF52DE' };
-        default: return { status: 'Unknown', color: '#8E8E93' };
-    }
+  switch (statusType) {
+    case -1: return { status: 'To Do', color: '#8E8E93' };
+    case 0: return { status: 'In Progress', color: '#007AFF' };
+    case 1: return { status: 'Complete', color: '#34C759' };
+    case 4: return { status: 'Graded', color: '#AF52DE' };
+    default: return { status: 'Unknown', color: '#8E8E93' };
+  }
 };
 
 const MorePage = ({ onOpenChangelog, onNavigate }) => {
@@ -1115,7 +1114,7 @@ const MorePage = ({ onOpenChangelog, onNavigate }) => {
     <View style={[styles.pageContentContainer, styles.placeholderAlignment]}>
       <Text style={styles.pageTitle}>More</Text>
       <View style={styles.menuList}>
-       <MenuItem label="Messages" onPress={() => onNavigate('Messages')} />
+        <MenuItem label="Messages" onPress={() => onNavigate('Messages')} />
         <MenuItem label="Settings" onPress={() => onNavigate('Settings')} />
         <MenuItem label="Grades" onPress={() => onNavigate('Grades')} />
         <MenuItem label="Classes" onPress={() => onNavigate('Classes')} />
@@ -1133,20 +1132,20 @@ const MorePage = ({ onOpenChangelog, onNavigate }) => {
 };
 
 const ChangelogPage = ({ onClose }) => (
-    <SafeAreaView style={styles.changelogContainer}>
-        <View style={styles.changelogHeader}>
-            <Text style={styles.pageTitle}>Changelog</Text>
-            <TouchableOpacity onPress={onClose}><Text style={styles.closeButtonText}>Back</Text></TouchableOpacity>
+  <SafeAreaView style={styles.changelogContainer}>
+    <View style={styles.changelogHeader}>
+      <Text style={styles.pageTitle}>Changelog</Text>
+      <TouchableOpacity onPress={onClose}><Text style={styles.closeButtonText}>Back</Text></TouchableOpacity>
+    </View>
+    <ScrollView contentContainerStyle={styles.changelogContent}>
+      {CHANGELOG_DATA.map(log => (
+        <View key={log.version} style={styles.changelogVersion}>
+          <Text style={styles.changelogVersionTitle}>Version {log.version}</Text>
+          {log.changes.map((change, index) => <Text key={index} style={styles.changelogChangeItem}>• {change}</Text>)}
         </View>
-        <ScrollView contentContainerStyle={styles.changelogContent}>
-            {CHANGELOG_DATA.map(log => (
-                <View key={log.version} style={styles.changelogVersion}>
-                    <Text style={styles.changelogVersionTitle}>Version {log.version}</Text>
-                    {log.changes.map((change, index) => <Text key={index} style={styles.changelogChangeItem}>• {change}</Text>)}
-                </View>
-            ))}
-        </ScrollView>
-    </SafeAreaView>
+      ))}
+    </ScrollView>
+  </SafeAreaView>
 );
 
 const MessagesPage = ({
@@ -1215,8 +1214,8 @@ const MessagesPage = ({
   // --- Filter recipients locally ---
   const filteredRecipients = recipientQuery
     ? allRecipients.filter(r =>
-        (r.name || '').toLowerCase().includes(recipientQuery.toLowerCase())
-      )
+      (r.name || '').toLowerCase().includes(recipientQuery.toLowerCase())
+    )
     : [];
 
 
@@ -1432,13 +1431,13 @@ const MessagesPage = ({
         onRequestClose={() => setIsComposing(false)}
         transparent
       >
-      <TouchableWithoutFeedback
-        onPress={() => {
-          Keyboard.dismiss();
-          richRef.current?.blurContentEditor?.();
-        }}
-      >
-        <View style={styles.composeOverlay}>
+        <TouchableWithoutFeedback
+          onPress={() => {
+            Keyboard.dismiss();
+            richRef.current?.blurContentEditor?.();
+          }}
+        >
+          <View style={styles.composeOverlay}>
             <View style={styles.composeContainer}>
               <ScrollView
                 contentContainerStyle={{ paddingBottom: 20 }}
@@ -1585,7 +1584,7 @@ const MessagesPage = ({
                 </View>
               </ScrollView>
             </View>
-        </View>
+          </View>
         </TouchableWithoutFeedback>
       </Modal>
 
@@ -2104,7 +2103,7 @@ const GradesPage = ({ userInfo, grades, fetchGrades, fetchGradeDetails, isLoadin
       else if (grade >= 67) [gpaCP, gpaHonors, gpaAP] = [1.3, 1.8, 2.3];
       else if (grade >= 63) [gpaCP, gpaHonors, gpaAP] = [1.0, 1.5, 2.0];
       else if (grade >= 60) [gpaCP, gpaHonors, gpaAP] = [0.7, 1.2, 1.7];
-      else [gpaCP, gpaHonors, gpaAP] = [0, 0, 0];
+      else[gpaCP, gpaHonors, gpaAP] = [0, 0, 0];
 
       totalUnweighted += gpaCP;
 
@@ -2132,8 +2131,8 @@ const GradesPage = ({ userInfo, grades, fetchGrades, fetchGradeDetails, isLoadin
 
   // --- Render ---
   return (
-  <View style={styles.pageContentContainer}>
-    <BackHeader title="Grades" onBack={onNavigateBack} />
+    <View style={styles.pageContentContainer}>
+      <BackHeader title="Grades" onBack={onNavigateBack} />
 
       {/* GPA Summary */}
       {grades && grades.length > 0 && (
@@ -2163,9 +2162,9 @@ const GradesPage = ({ userInfo, grades, fetchGrades, fetchGradeDetails, isLoadin
           <ActivityIndicator size="large" color="#FFFFFF" style={{ marginTop: 40 }} />
         ) : grades && grades.length > 0 ? (
           grades.map((course, index) => (
-            <TouchableOpacity 
-              key={index} 
-              style={styles.gradeCard} 
+            <TouchableOpacity
+              key={index}
+              style={styles.gradeCard}
               onPress={() => fetchGradeDetails(course.sectionid, course.markingperiodid, userInfo.UserId)}
             >
               <View style={styles.gradeHeader}>
@@ -2231,8 +2230,8 @@ const GradeDetailsModal = ({ visible, details, onClose }) => {
                           <Text style={styles.assignmentRowTitle}>{a.AssignmentShortDescription || 'Untitled'}</Text>
                           <Text style={styles.assignmentRowScore}>{a.Points}/{a.MaxPoints}</Text>
                         </View>
-                          {a.Comment ? <FormattedText html={a.Comment} /> : null}
-                        <View style={styles.assignmentDivider}/>
+                        {a.Comment ? <FormattedText html={a.Comment} /> : null}
+                        <View style={styles.assignmentDivider} />
                       </View>
                     ))}
                   </View>
@@ -2254,7 +2253,7 @@ const SettingsPage = ({ onNavigateBack, backgroundUri, blurAmount, setBackground
     try {
       setFetchAllMessages(value);                 // <- updates UI immediately
       await AsyncStorage.setItem('fetchAllMessages', String(value)); // persist
-    } catch {}
+    } catch { }
   };
 
   useEffect(() => {
@@ -2367,40 +2366,40 @@ const SettingsPage = ({ onNavigateBack, backgroundUri, blurAmount, setBackground
         </View>
 
         <Text style={styles.settingsCardTitle}>Expiremental</Text>
-          <View style={styles.settingsCard} pointerEvents="auto">
-            <Text style={styles.settingsCardSubtitle}>Fetch all messages at once</Text>
-              <Switch
-                value={fetchAllMessages}
-                onValueChange={async (val) => {
-                  if (val) {
-                    Alert.alert(
-                      'Warning',
-                      'Fetching all messages at once may take longer to load and use more data, but it can be usefull for marking large amounts as read and more.',
-                      [
-                        {
-                          text: 'Cancel',
-                          style: 'cancel',
-                          onPress: () => {}, // do nothing, don’t toggle
-                        },
-                        {
-                          text: 'Continue',
-                          style: 'default',
-                          onPress: async () => {
-                            setFetchAllMessages(true);
-                            await AsyncStorage.setItem('fetchAllMessages', 'true');
-                          },
-                        },
-                      ]
-                    );
-                  } else {
-                    setFetchAllMessages(false);
-                    await AsyncStorage.setItem('fetchAllMessages', 'false');
-                  }
-                }}
-                trackColor={{ false: '#2C2C2E', true: '#0A84FF' }}
-                thumbColor="#FFF"
-              />
-          </View>
+        <View style={styles.settingsCard} pointerEvents="auto">
+          <Text style={styles.settingsCardSubtitle}>Fetch all messages at once</Text>
+          <Switch
+            value={fetchAllMessages}
+            onValueChange={async (val) => {
+              if (val) {
+                Alert.alert(
+                  'Warning',
+                  'Fetching all messages at once may take longer to load and use more data, but it can be usefull for marking large amounts as read and more.',
+                  [
+                    {
+                      text: 'Cancel',
+                      style: 'cancel',
+                      onPress: () => { }, // do nothing, don’t toggle
+                    },
+                    {
+                      text: 'Continue',
+                      style: 'default',
+                      onPress: async () => {
+                        setFetchAllMessages(true);
+                        await AsyncStorage.setItem('fetchAllMessages', 'true');
+                      },
+                    },
+                  ]
+                );
+              } else {
+                setFetchAllMessages(false);
+                await AsyncStorage.setItem('fetchAllMessages', 'false');
+              }
+            }}
+            trackColor={{ false: '#2C2C2E', true: '#0A84FF' }}
+            thumbColor="#FFF"
+          />
+        </View>
       </ScrollView>
     </View>
   );
@@ -2444,11 +2443,11 @@ const styles = StyleSheet.create({
   appContainer: { flex: 1, backgroundColor: '#1C1C1E' }, // Main wrapper for the app
   webviewVisible: { flex: 1, backgroundColor: '#FFFFFF' },
   webviewHidden: { position: 'absolute', top: -10000, left: 0, width: 0, height: 0, zIndex: -1 },
-  loadingOverlay: { position: 'absolute',left: 0,right: 0,bottom: 0,backgroundColor: 'rgba(0, 0, 0, 0.7)',flexDirection: 'row',alignItems: 'center',justifyContent: 'center',padding: 10,zIndex: 10,},
+  loadingOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.7)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 10, zIndex: 10, },
   loadingText: { color: '#FFFFFF', marginLeft: 10, fontSize: 16 },
   loginHeader: { paddingVertical: 10, paddingHorizontal: 20, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
   loginTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', color: '#1C1C1E' },
-  appHeader: { marginTop: -30, paddingHorizontal: 20},
+  appHeader: { marginTop: -30, paddingHorizontal: 20 },
   appTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', color: '#FFFFFF' },
   subtitle: { fontSize: 14, color: '#D32F2F', textAlign: 'center', marginTop: 8, fontWeight: '500' },
   mainContent: { flex: 1, justifyContent: 'center', alignItems: 'center', width: '100%' },
@@ -2458,8 +2457,8 @@ const styles = StyleSheet.create({
   pageContentText: { fontSize: 16, color: '#A0A0A0', marginTop: 10, textAlign: 'center' },
   greeting: { fontSize: 32, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 30, },
   profileImage: { width: 150, height: 150, borderRadius: 75, borderWidth: 3, borderColor: '#007AFF', marginBottom: 20, backgroundColor: '#3A3A3C' },
-  profileImagePlaceholder: { alignItems: 'center', justifyContent: 'center'},
-  profileImagePlaceholderText: { color: '#FFFFFF', fontSize: 72, fontWeight: 'bold'},
+  profileImagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  profileImagePlaceholderText: { color: '#FFFFFF', fontSize: 72, fontWeight: 'bold' },
   navBar: { flexDirection: 'row', backgroundColor: '#2C2C2E', borderTopWidth: 1, borderTopColor: '#3A3A3C', paddingTop: 10 },
   navButton: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   navLabel: { fontSize: 12, color: '#8E8E93', marginTop: 4 },
@@ -2475,41 +2474,41 @@ const styles = StyleSheet.create({
   dateNavButton: { padding: 10 },
   dateNavText: { color: '#007AFF', fontSize: 16 },
   dateHeaderText: { color: '#FFFFFF', fontSize: 18, fontWeight: '600' },
-  scheduleCard: { flexDirection: 'row', backgroundColor: '#2C2C2E', borderRadius: 12, marginBottom: 10, width: '100%', overflow: 'hidden'},
+  scheduleCard: { flexDirection: 'row', backgroundColor: '#2C2C2E', borderRadius: 12, marginBottom: 10, width: '100%', overflow: 'hidden' },
   scheduleColorBar: { width: 6 },
-  scheduleTime: { padding: 15, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderRightColor: '#3A3A3C'},
+  scheduleTime: { padding: 15, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderRightColor: '#3A3A3C' },
   scheduleTimeText: { color: '#E5E5EA', fontSize: 14 },
-  scheduleDetails: { flex: 1, padding: 15},
-  scheduleCourseTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', marginBottom: 4},
+  scheduleDetails: { flex: 1, padding: 15 },
+  scheduleCourseTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
   scheduleSubText: { color: '#8E8E93', fontSize: 14 },
-  scheduleBlock: { padding: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#3A3A3C'},
+  scheduleBlock: { padding: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#3A3A3C' },
   scheduleBlockText: { color: '#FFFFFF', fontSize: 13, fontWeight: 'bold' },
   weekNavigator: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingVertical: 10, marginBottom: 10 },
   weekNavButton: { padding: 10 },
   weekNavText: { color: '#007AFF', fontSize: 16 },
   weekHeaderText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  assignmentCard: { backgroundColor: '#2C2C2E', borderRadius: 12, padding: 15, marginBottom: 15, width: '100%'},
+  assignmentCard: { backgroundColor: '#2C2C2E', borderRadius: 12, padding: 15, marginBottom: 15, width: '100%' },
   assignmentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   assignmentClass: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', flex: 1, marginRight: 10 },
   assignmentStatus: { fontSize: 12, fontWeight: '700' },
   assignmentDesc: { color: '#E5E5EA', fontSize: 15, marginBottom: 12 },
   assignmentDue: { color: '#8E8E93', fontSize: 12 },
-  changeStatusButton:{backgroundColor:'#1C1C1E',paddingVertical:10,paddingHorizontal:15,borderRadius:10,marginTop:8,borderWidth:1,borderColor:'#3A3A3C'},
-  changeStatusText:{color:'#FFFFFF',fontSize:16,textAlign:'center'},
-  subModalBackdrop:{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'rgba(0,0,0,0.6)'},
-  subModalContainer:{backgroundColor:'#2C2C2E',padding:20,borderRadius:16,width:'85%',alignItems:'stretch'},
-  subModalTitle:{fontSize:18,fontWeight:'700',color:'#FFFFFF',marginBottom:15,textAlign:'center'},
-  radioRow:{flexDirection:'row',alignItems:'center',marginVertical:6},
-  radioOuter:{width:22,height:22,borderRadius:11,borderWidth:2,borderColor:'#A0A0A0',justifyContent:'center',alignItems:'center',marginRight:10},
-  radioOuterActive:{borderColor:'#007AFF'},
-  radioInner:{width:10,height:10,borderRadius:5,backgroundColor:'#007AFF'},
-  radioLabel:{color:'#FFFFFF',fontSize:16},
-  modalButtonRow:{flexDirection:'row',justifyContent:'space-around',marginTop:20},
-  saveButton:{backgroundColor:'#007AFF',paddingVertical:10,paddingHorizontal:20,borderRadius:8},
-  saveButtonText:{color:'#FFFFFF',fontWeight:'600',fontSize:16},
-  cancelButton:{backgroundColor:'#3A3A3C',paddingVertical:10,paddingHorizontal:20,borderRadius:8},
-  cancelButtonText:{color:'#FFFFFF',fontWeight:'600',fontSize:16},
-  noAssignmentsText: { color: '#8E8E93', textAlign: 'center', marginTop: 40, fontSize: 16},
+  changeStatusButton: { backgroundColor: '#1C1C1E', paddingVertical: 10, paddingHorizontal: 15, borderRadius: 10, marginTop: 8, borderWidth: 1, borderColor: '#3A3A3C' },
+  changeStatusText: { color: '#FFFFFF', fontSize: 16, textAlign: 'center' },
+  subModalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)' },
+  subModalContainer: { backgroundColor: '#2C2C2E', padding: 20, borderRadius: 16, width: '85%', alignItems: 'stretch' },
+  subModalTitle: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', marginBottom: 15, textAlign: 'center' },
+  radioRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 6 },
+  radioOuter: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#A0A0A0', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  radioOuterActive: { borderColor: '#007AFF' },
+  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#007AFF' },
+  radioLabel: { color: '#FFFFFF', fontSize: 16 },
+  modalButtonRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 20 },
+  saveButton: { backgroundColor: '#007AFF', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
+  saveButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 16 },
+  cancelButton: { backgroundColor: '#3A3A3C', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
+  cancelButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 16 },
+  noAssignmentsText: { color: '#8E8E93', textAlign: 'center', marginTop: 40, fontSize: 16 },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
   modalContainer: { backgroundColor: '#2C2C2E', borderRadius: 14, padding: 20, width: '90%', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 5 },
   modalTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
@@ -2522,7 +2521,7 @@ const styles = StyleSheet.create({
   closeButton: { backgroundColor: '#007AFF', padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 10 },
   closeButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
   // Changelog styles
-  changelogContainer: {flex: 1, backgroundColor: '#1C1C1E' },
+  changelogContainer: { flex: 1, backgroundColor: '#1C1C1E' },
   changelogHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginTop: 60, backgroundColor: '#1C1C1E' },
   changelogContent: { paddingHorizontal: 20 },
   changelogVersion: { marginBottom: 25 },
@@ -2554,7 +2553,7 @@ const styles = StyleSheet.create({
   gradeGroupInfo: { color: '#8E8E93', fontSize: 14, marginTop: 4 },
   gradeAssignmentsList: { marginTop: 10 },
   assignmentRow: { marginBottom: 10 },
-  assignmentRowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 3},
+  assignmentRowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 3 },
   assignmentRowTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '600', flex: 1, marginRight: 10 },
   assignmentRowScore: { color: '#34C759', fontSize: 15, fontWeight: 'bold' },
   assignmentRowDesc: { color: '#E5E5EA', fontSize: 14, marginTop: 4 },
@@ -2583,7 +2582,7 @@ const styles = StyleSheet.create({
   paginationButtonText: { color: '#FFF', fontWeight: '600', fontSize: 15 },
   paginationPageText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
   composeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  composeContainer: { backgroundColor: '#1C1C1E', borderRadius: 16, width: '92%',  padding: 16 },
+  composeContainer: { backgroundColor: '#1C1C1E', borderRadius: 16, width: '92%', padding: 16 },
   composeTitle: { color: '#fff', fontSize: 20, fontWeight: '600', marginBottom: 10 },
   composeInput: { backgroundColor: '#2C2C2E', color: '#fff', borderRadius: 8, padding: 10, marginVertical: 6 },
   autocompleteList: { backgroundColor: '#2C2C2E', borderRadius: 8, marginBottom: 6, maxHeight: 150 },
@@ -2608,32 +2607,32 @@ const styles = StyleSheet.create({
   leaderboardRank: { color: '#888', fontSize: 18, width: 30, textAlign: 'left' },
   leaderboardName: { color: '#FFFFFF', fontSize: 18, flex: 1 },
   leaderboardScore: { color: '#00A8FF', fontSize: 18, fontWeight: '600', textAlign: 'right' },
-  clickerHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',width:'100%',marginHorizontal:20, marginTop:10 ,paddingRight:50},
-  clickerTitle:{color:'#FFFFFF',fontSize:24,fontWeight:'bold',textAlign:'center',flex:1},
-  backButtonInline:{padding:10},
-  shopButton:{},
-  shopContainer:{backgroundColor:'#2C2C2E',margin:30,borderRadius:16,padding:20,alignItems:'center'},
-  shopTitle:{color:'#FFFFFF',fontSize:24,fontWeight:'bold',marginBottom:6},
-  shopSubtitle:{color:'#A0A0A0',fontSize:14,marginBottom:20},
-  upgradeButton:{backgroundColor:'#007AFF',borderRadius:12,padding:15,marginBottom:15,width:'100%',alignItems:'center'},
-  upgradeText:{color:'#FFFFFF',fontSize:16,fontWeight:'600'},
-  floaterText:{color:'#FFFFFF',fontSize:22,fontWeight:'bold',position:'absolute'},
+  clickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginHorizontal: 20, marginTop: 10, paddingRight: 50 },
+  clickerTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: 'bold', textAlign: 'center', flex: 1 },
+  backButtonInline: { padding: 10 },
+  shopButton: {},
+  shopContainer: { backgroundColor: '#2C2C2E', margin: 30, borderRadius: 16, padding: 20, alignItems: 'center' },
+  shopTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: 'bold', marginBottom: 6 },
+  shopSubtitle: { color: '#A0A0A0', fontSize: 14, marginBottom: 20 },
+  upgradeButton: { backgroundColor: '#007AFF', borderRadius: 12, padding: 15, marginBottom: 15, width: '100%', alignItems: 'center' },
+  upgradeText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  floaterText: { color: '#FFFFFF', fontSize: 22, fontWeight: 'bold', position: 'absolute' },
   devInput: { backgroundColor: '#2C2C2E', color: '#FFF', borderRadius: 8, padding: 10, width: '100%', marginVertical: 6, fontSize: 16, },
   blurLabel: { color: '#FFFFFF', fontSize: 16, marginTop: 8, textAlign: 'center' },
-  settingsCard:{backgroundColor:'#2C2C2E',borderRadius:12,padding:15,marginBottom:15,width:'100%'},
-  settingsCardTitle:{color:'#FFFFFF',fontSize:28,fontWeight:'bold',marginBottom:4},
-  settingsCardSubtitle:{color:'#8E8E93',fontSize:14,marginBottom:10},
-  colorRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingVertical:12,borderBottomWidth:1,borderColor:'#3A3A3C'},
-  colorLabel:{color:'#FFFFFF',fontSize:16,flex:1},
-  upgradeButton:{backgroundColor:"#007AFF",borderRadius:12,padding:14,alignItems:'center',marginTop:10},
-  upgradeText:{color:'#FFFFFF',fontSize:16,fontWeight:'600'},
-  previewImage:{width:'100%',height:180,borderRadius:10,marginTop:10,resizeMode:'cover'},
-  previewPlaceholder:{width:'100%',height:180,borderRadius:10,backgroundColor:'#3A3A3C',alignItems:'center',justifyContent:'center',marginTop:10},
-  placeholderText:{color:'#8E8E93',fontSize:16},
-  blurLabel:{color:'#A0A0A0',fontSize:15,textAlign:'center',marginTop:8},
-  autocompleteWrapper: {position: 'absolute',top: 45,left: 0,right: 0,zIndex: 9999,backgroundColor: '#1C1C1E', borderRadius: 6,maxHeight: 200,borderWidth: 1,borderColor: '#2C2C2E',shadowColor: '#000',shadowOffset: { width: 0, height: 4 },shadowOpacity: 0.3,shadowRadius: 4,elevation: 10,},
-  autocompleteList: {paddingVertical: 4,},
-  autocompleteItem: {paddingVertical: 8,paddingHorizontal: 10,color: '#FFF',borderBottomWidth: 1,borderBottomColor: '#2C2C2E',},
+  settingsCard: { backgroundColor: '#2C2C2E', borderRadius: 12, padding: 15, marginBottom: 15, width: '100%' },
+  settingsCardTitle: { color: '#FFFFFF', fontSize: 28, fontWeight: 'bold', marginBottom: 4 },
+  settingsCardSubtitle: { color: '#8E8E93', fontSize: 14, marginBottom: 10 },
+  colorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderColor: '#3A3A3C' },
+  colorLabel: { color: '#FFFFFF', fontSize: 16, flex: 1 },
+  upgradeButton: { backgroundColor: "#007AFF", borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 10 },
+  upgradeText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  previewImage: { width: '100%', height: 180, borderRadius: 10, marginTop: 10, resizeMode: 'cover' },
+  previewPlaceholder: { width: '100%', height: 180, borderRadius: 10, backgroundColor: '#3A3A3C', alignItems: 'center', justifyContent: 'center', marginTop: 10 },
+  placeholderText: { color: '#8E8E93', fontSize: 16 },
+  blurLabel: { color: '#A0A0A0', fontSize: 15, textAlign: 'center', marginTop: 8 },
+  autocompleteWrapper: { position: 'absolute', top: 45, left: 0, right: 0, zIndex: 9999, backgroundColor: '#1C1C1E', borderRadius: 6, maxHeight: 200, borderWidth: 1, borderColor: '#2C2C2E', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 10, },
+  autocompleteList: { paddingVertical: 4, },
+  autocompleteItem: { paddingVertical: 8, paddingHorizontal: 10, color: '#FFF', borderBottomWidth: 1, borderBottomColor: '#2C2C2E', },
 
 });
 
