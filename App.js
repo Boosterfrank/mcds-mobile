@@ -1026,7 +1026,7 @@ const AssignmentDetailModal = ({
       if (fetchAssignmentDetails)
         fetchAssignmentDetails(assignment.AssignmentIndexId);
       setIsUpdating(false);
-    }, 1000);
+    }, 100);
   };
 
   return (
@@ -1291,7 +1291,7 @@ const MessagesPage = ({
       clearSelection();
       setSelecting(false);
       fetchMessages(pageNumber);
-    }, 800);
+    }, 100);
   };
 
   // --- Filter recipients locally ---
