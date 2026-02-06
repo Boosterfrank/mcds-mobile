@@ -6,11 +6,10 @@ module.exports = ({ config }) => {
     // Top-level app config fields
     name: "MCDS",
     slug: "mcds-mobile",
-    version: "1.7.8",
+    version: "1.7.9",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "dark",
-    // architecture flag if used
     newArchEnabled: true,
 
     ios: {

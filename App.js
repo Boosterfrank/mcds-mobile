@@ -46,7 +46,7 @@ const shopIconXml = `<svg version="1.0" xmlns="http://www.w3.org/2000/svg" viewB
 
 // --- Configuration ---
 const BASE_URL = 'https://miamicountryday.myschoolapp.com';
-const LOGIN_URL = `${BASE_URL}/`;
+const LOGIN_URL = `${BASE_URL}/app?svcid=edu#login`;
 const CONTEXT_API_URL = `${BASE_URL}/api/webapp/context`;
 const ASSIGNMENTS_API_URL = `${BASE_URL}/api/assignment2/StudentAssignmentCenterGet?displayByDueDate=true`;
 const ASSIGNMENT_DETAIL_API_URL = `${BASE_URL}/api/assignment2/UserAssignmentDetailsGetAllStudentData`;
@@ -54,14 +54,16 @@ const SCHEDULE_API_URL = `${BASE_URL}/api/schedule/MyDayCalendarStudentList/`;
 const GRADES_API_URL = `${BASE_URL}/api/datadirect/ParentStudentUserClassesGet`;
 const GRADE_DETAILS_API_URL = `${BASE_URL}/api/gradebook/AssignmentPerformanceStudent`;
 const MESSAGES_API_URL = `${BASE_URL}/api/message/inbox/?format=json`;
+const USER_STATUS_API_URL = `${BASE_URL}/api/webapp/userstatus`;
 const APP_HOME_URL_FRAGMENT = '/app/';
 
-const APP_VERSION = '1.7.8';
+const APP_VERSION = '1.7.9';
 
 const CHANGELOG_DATA = [
+  { version: '1.7.9', changes: ['Added autologin', 'Added new message notification badge', 'Fixed message details not loading or looking weird', 'other bug fixes'] },
   { version: '1.7.8', changes: ['Fixed gpa not bieng accurate', 'other bug fixes'] },
   { version: '1.7.7', changes: ['Added change assignment status', 'Added ability to send POST requests to the server', 'Added the ability to send messages', 'Lots of bug fixes'] },
-  { version: '1.7.6', changes: ['Fixed cicker saving too much', 'Added custom app backgrounds', 'Added dark/tinted icons'] },
+  { version: '1.7.6', changes: ['Fixed clicker saving too much', 'Added custom app backgrounds', 'Added dark/tinted icons'] },
   { version: '1.7.5', changes: ['Added shop for clicker', 'added useless tips'] },
   { version: '1.7.5', changes: ['Fixed score not saving correctly', 'fixed webview offset'] },
   { version: '1.7.4', changes: ['Added Messages Page', 'also added clicker game cuz I got bored and why not'] },
@@ -108,7 +110,9 @@ const App = () => {
   const [csrfToken, setCsrfToken] = useState(null);
   const [fetchAllMessages, setFetchAllMessages] = useState(false);
   const [isReloginMode, setIsReloginMode] = useState(false);
+
   const [allRecipients, setAllRecipients] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const richRef = useRef();
 
   const resetWebViewToBase = () => {
@@ -136,6 +140,54 @@ const App = () => {
     })();
   }, []);
 
+  const autoClickLogin = `
+    (function() {
+      let retries = 0;
+      const maxRetries = 2; // Try again 2 times
+
+      function attemptLogin() {
+        const emailInput = document.getElementById('Username');
+        const rememberCheckbox = document.getElementById('remember');
+        const nextBtn = document.getElementById('nextBtn');
+
+        // Check if elements exist
+        if (!emailInput || !rememberCheckbox || !nextBtn) return false;
+
+        // Check conditions: Email filled AND Remember me checked
+        const ready = (emailInput.value.trim().length > 0) && rememberCheckbox.checked;
+
+        if (ready) {
+          nextBtn.focus();
+          const opts = { bubbles: true, cancelable: true, view: window };
+          nextBtn.dispatchEvent(new MouseEvent('mousedown', opts));
+          nextBtn.dispatchEvent(new MouseEvent('mouseup', opts));
+          nextBtn.dispatchEvent(new MouseEvent('click', opts));
+          
+          // Tell React Native we finished
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'AUTO_LOGIN_COMPLETE', success: true }));
+          return true;
+        }
+        return false;
+      }
+
+      // 1. Try immediately
+      if (attemptLogin()) return;
+
+      // 2. If failed, start interval (1 second delay)
+      const interval = setInterval(() => {
+        retries++;
+        const success = attemptLogin();
+        
+        if (success) {
+          clearInterval(interval);
+        } else if (retries >= maxRetries) {
+          // Stop trying after 2 retries
+          clearInterval(interval);
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'AUTO_LOGIN_COMPLETE', success: false }));
+        }
+      }, 1000); // 1000ms = 1 second
+    })();
+  `;
 
   useEffect(() => {
     (async () => {
@@ -338,6 +390,9 @@ const App = () => {
         else if (message.type === 'MESSAGES') {
           setMessages(responseData);
         }
+        else if (message.type === 'USER_STATUS') {
+          setUnreadCount(responseData.UnreadMessageCount || 0);
+        }
         else if (message.type === 'FETCH_RECIPIENTS') {
           try {
             const parsed = Array.isArray(responseData)
@@ -370,6 +425,16 @@ const App = () => {
 
 
   const handleNavigationStateChange = (navState) => {
+
+    // If the page finished loading and we are at the login base URL
+    if (!navState.loading && navState.url === LOGIN_URL) {
+      // Small delay to ensure the DOM is fully interactive
+      setTimeout(() => {
+        webviewRef.current?.injectJavaScript(autoClickLogin);
+        console.log('[AutoLogin] Activated');
+      }, 1700);
+    }
+    // existing logic to detect login
     if (!navState.loading && navState.url.includes(APP_HOME_URL_FRAGMENT) && authStatus === 'LOGGED_OUT') {
       setAuthStatus('LOGGING_IN');
     }
@@ -378,6 +443,7 @@ const App = () => {
   useEffect(() => {
     if (authStatus === 'LOGGING_IN' && !userInfo) {
       fetchApiInWebView(CONTEXT_API_URL, 'CONTEXT');
+      fetchApiInWebView(USER_STATUS_API_URL, 'USER_STATUS');
     }
   }, [authStatus]);
 
@@ -590,6 +656,7 @@ const App = () => {
               allRecipients={allRecipients}
               setAllRecipients={setAllRecipients}
               richRef={richRef}
+              unreadCount={unreadCount}
             />
             <GradeDetailsModal
               visible={!!selectedCourseDetails}
@@ -619,7 +686,7 @@ const BackHeader = ({ title, onBack }) => (
 );
 
 // --- Page Content Wrapper with Transitions ---
-const PageContent = ({ activePage, userInfo, richRef, assignments, postApiInWebView, fetchAllMessages, setFetchAllMessages, fetchAssignments, assignmentDetails, fetchAssignmentDetails, schedule, fetchSchedule, isLoading, onOpenChangelog, onNavigate, grades, fetchGrades, fetchGradeDetails, messages, fetchMessages, selectedMessage, setSelectedMessage, backgroundUri, blurAmount, setBackgroundUri, setBlurAmount, fetchApiInWebView, setAllRecipients, allRecipients }) => {
+const PageContent = ({ activePage, userInfo, richRef, assignments, postApiInWebView, fetchAllMessages, setFetchAllMessages, fetchAssignments, assignmentDetails, fetchAssignmentDetails, schedule, fetchSchedule, isLoading, onOpenChangelog, onNavigate, grades, fetchGrades, fetchGradeDetails, messages, fetchMessages, selectedMessage, setSelectedMessage, backgroundUri, blurAmount, setBackgroundUri, setBlurAmount, fetchApiInWebView, setAllRecipients, allRecipients, unreadCount }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     fadeAnim.setValue(0);
@@ -628,7 +695,7 @@ const PageContent = ({ activePage, userInfo, richRef, assignments, postApiInWebV
 
   let currentPageComponent;
   switch (activePage) {
-    case 'Home': currentPageComponent = <HomePage userInfo={userInfo} />; break;
+    case 'Home': currentPageComponent = <HomePage userInfo={userInfo} unreadCount={unreadCount} onNavigate={onNavigate} />; break;
     case 'Assignments': currentPageComponent = <AssignmentCenterPage postApiInWebView={postApiInWebView} assignments={assignments} fetchAssignments={fetchAssignments} isLoading={isLoading} assignmentDetails={assignmentDetails} fetchAssignmentDetails={fetchAssignmentDetails} />; break;
     case 'Schedule': currentPageComponent = <SchedulePage scheduleData={schedule} fetchSchedule={fetchSchedule} isLoading={isLoading} />; break;
     case 'More':
@@ -699,16 +766,32 @@ const PageContent = ({ activePage, userInfo, richRef, assignments, postApiInWebV
 
 // --- Components ---
 const LoadingOverlay = ({ text }) => <View style={styles.loadingOverlay}><ActivityIndicator size="small" color="#FFFFFF" /><Text style={styles.loadingText}>{text}</Text></View>;
-const HomePage = ({ userInfo }) => {
+const HomePage = ({ userInfo, unreadCount, onNavigate }) => {
   const photoUrl = `${BASE_URL}${userInfo.ProfilePhoto?.LargeFilenameEditedUrl}`;
   return (
     <View style={[styles.pageContentContainer, { justifyContent: 'center' }]}>
       <Text style={styles.greeting}>Hey, {userInfo.FirstName}!</Text>
-      {userInfo.ProfilePhoto?.LargeFilenameEditedUrl ? (
-        <Image source={{ uri: photoUrl }} style={styles.profileImage} />
-      ) : (
-        <View style={[styles.profileImage, styles.profileImagePlaceholder]}><Text style={styles.profileImagePlaceholderText}>{userInfo.FirstName.charAt(0)}</Text></View>
-      )}
+      <TouchableOpacity onPress={() => onNavigate('Messages')}>
+        {userInfo.ProfilePhoto?.LargeFilenameEditedUrl ? (
+          <View>
+            <Image source={{ uri: photoUrl }} style={styles.profileImage} />
+            {unreadCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationText}>{unreadCount}</Text>
+              </View>
+            )}
+          </View>
+        ) : (
+          <View>
+            <View style={[styles.profileImage, styles.profileImagePlaceholder]}><Text style={styles.profileImagePlaceholderText}>{userInfo.FirstName.charAt(0)}</Text></View>
+            {unreadCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationText}>{unreadCount}</Text>
+              </View>
+            )}
+          </View>
+        )}
+      </TouchableOpacity>
       <View style={styles.emailRow}>
         <TouchableOpacity
           style={styles.emailTouchable}
@@ -1375,7 +1458,6 @@ const MessagesPage = ({
                     );
                   }
                   setSelectedMessage(msg);
-                  setTimeout(fetchMessages, 600);
                 }}
               >
                 {selecting && (
@@ -2039,7 +2121,7 @@ const MessageDetailModal = ({ visible, message, onClose }) => {
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={styles.gradeDetailsSafeArea}>
+      <SafeAreaView style={styles.messageDetailsSafeArea}>
         <View style={styles.gradeDetailsHeader}>
           <TouchableOpacity onPress={onClose}>
             <Text style={styles.gradeDetailsCloseButton}>Close</Text>
@@ -2566,6 +2648,7 @@ const styles = StyleSheet.create({
   backHeaderTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', textAlign: 'center', flex: 1 },
   skipButton: { position: 'absolute', right: 10, top: 10, padding: 15 },
   skipText: { color: '#007AFF', fontSize: 16, fontWeight: '600' },
+  messageDetailsSafeArea: { flex: 1, backgroundColor: '#1C1C1E', paddingTop: 5 },
   messageCard: { backgroundColor: '#2C2C2E', borderRadius: 12, padding: 15, marginBottom: 15, width: '100%', },
   messageSubject: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
   messageSender: { color: '#8E8E93', fontSize: 14, marginTop: 4 },
@@ -2633,7 +2716,8 @@ const styles = StyleSheet.create({
   autocompleteWrapper: { position: 'absolute', top: 45, left: 0, right: 0, zIndex: 9999, backgroundColor: '#1C1C1E', borderRadius: 6, maxHeight: 200, borderWidth: 1, borderColor: '#2C2C2E', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 10, },
   autocompleteList: { paddingVertical: 4, },
   autocompleteItem: { paddingVertical: 8, paddingHorizontal: 10, color: '#FFF', borderBottomWidth: 1, borderBottomColor: '#2C2C2E', },
-
+  notificationBadge: { position: 'absolute', right: 0, top: 0, backgroundColor: '#FF3B30', borderRadius: 12, width: 24, height: 24, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#1C1C1E', zIndex: 10, },
+  notificationText: { color: '#FFFFFF', fontSize: 12, fontWeight: 'bold', },
 });
 
 export default AppWrapper;
