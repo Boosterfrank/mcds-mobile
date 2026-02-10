@@ -60,7 +60,7 @@ const APP_HOME_URL_FRAGMENT = '/app/';
 const APP_VERSION = '1.7.9';
 
 const CHANGELOG_DATA = [
-  { version: '1.7.9', changes: ['Added autologin', 'Added new message notification badge', 'Fixed message details not loading or looking weird', 'other bug fixes'] },
+  { version: '1.7.9', changes: ['Removed ipad support', 'Added autologin', 'Added new message notification badge', 'Fixed message details not loading or looking weird', 'Updated dependencies & packages', 'other bug fixes'] },
   { version: '1.7.8', changes: ['Fixed gpa not bieng accurate', 'other bug fixes'] },
   { version: '1.7.7', changes: ['Added change assignment status', 'Added ability to send POST requests to the server', 'Added the ability to send messages', 'Lots of bug fixes'] },
   { version: '1.7.6', changes: ['Fixed clicker saving too much', 'Added custom app backgrounds', 'Added dark/tinted icons'] },
@@ -185,7 +185,7 @@ const App = () => {
           clearInterval(interval);
           window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'AUTO_LOGIN_COMPLETE', success: false }));
         }
-      }, 1000); // 1000ms = 1 second
+      }, 1200); // 1000ms = 1 second
     })();
   `;
 
@@ -432,7 +432,7 @@ const App = () => {
       setTimeout(() => {
         webviewRef.current?.injectJavaScript(autoClickLogin);
         console.log('[AutoLogin] Activated');
-      }, 1700);
+      }, 2150);
     }
     // existing logic to detect login
     if (!navState.loading && navState.url.includes(APP_HOME_URL_FRAGMENT) && authStatus === 'LOGGED_OUT') {
@@ -446,6 +446,12 @@ const App = () => {
       fetchApiInWebView(USER_STATUS_API_URL, 'USER_STATUS');
     }
   }, [authStatus]);
+
+  useEffect(() => {
+    if (activePage === 'Home' && authStatus === 'LOGGED_IN') {
+      fetchApiInWebView(USER_STATUS_API_URL, 'USER_STATUS');
+    }
+  }, [activePage, authStatus]);
 
   const fetchAssignmentsCallback = useCallback(() => {
     fetchApiInWebView(ASSIGNMENTS_API_URL, 'ASSIGNMENTS');
@@ -771,7 +777,7 @@ const HomePage = ({ userInfo, unreadCount, onNavigate }) => {
   return (
     <View style={[styles.pageContentContainer, { justifyContent: 'center' }]}>
       <Text style={styles.greeting}>Hey, {userInfo.FirstName}!</Text>
-      <TouchableOpacity onPress={() => onNavigate('Messages')}>
+      <TouchableOpacity onPress={() => onNavigate('Messages')} disabled={unreadCount === 0}>
         {userInfo.ProfilePhoto?.LargeFilenameEditedUrl ? (
           <View>
             <Image source={{ uri: photoUrl }} style={styles.profileImage} />
@@ -2648,8 +2654,8 @@ const styles = StyleSheet.create({
   backHeaderTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', textAlign: 'center', flex: 1 },
   skipButton: { position: 'absolute', right: 10, top: 10, padding: 15 },
   skipText: { color: '#007AFF', fontSize: 16, fontWeight: '600' },
-  messageDetailsSafeArea: { flex: 1, backgroundColor: '#1C1C1E', paddingTop: 5 },
-  messageCard: { backgroundColor: '#2C2C2E', borderRadius: 12, padding: 15, marginBottom: 15, width: '100%', },
+  messageDetailsSafeArea: { flex: 1, backgroundColor: '#1C1C1E', paddingTop: 55 },
+  messageCard: { backgroundColor: '#2C2C2E', borderRadius: 12, padding: 15, marginBottom: 15 },
   messageSubject: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
   messageSender: { color: '#8E8E93', fontSize: 14, marginTop: 4 },
   messagePreview: { color: '#E5E5EA', fontSize: 14, marginTop: 6 },
