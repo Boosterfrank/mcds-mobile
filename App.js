@@ -353,7 +353,7 @@ const App = () => {
       };
 
       if (message.type === 'API_ERROR') {
-        triggerRelogin(`API Error: ${message.error}. Please sign in.`);
+        triggerRelogin(`API Error: ${message.warning}. Please sign in.`);
         return;
       }
 
@@ -2537,7 +2537,7 @@ const styles = StyleSheet.create({
   loginTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', color: '#1C1C1E' },
   appHeader: { marginTop: -30, paddingHorizontal: 20 },
   appTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', color: '#FFFFFF' },
-  subtitle: { fontSize: 14, color: '#D32F2F', textAlign: 'center', marginTop: 8, fontWeight: '500' },
+  subtitle: { fontSize: 14, color: '#000000ff', textAlign: 'center', marginTop: 8, fontWeight: '500' },
   mainContent: { flex: 1, justifyContent: 'center', alignItems: 'center', width: '100%' },
   pageContentContainer: { flex: 1, width: '100%', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20 },
   placeholderAlignment: { justifyContent: 'flex-start' },

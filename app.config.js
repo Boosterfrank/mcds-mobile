@@ -7,7 +7,6 @@ module.exports = ({ config }) => {
     name: "MCDS",
     slug: "mcds-mobile",
     version: "1.7.9",
-    orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "dark",
     newArchEnabled: true,
