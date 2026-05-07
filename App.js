@@ -57,15 +57,15 @@ const MESSAGES_API_URL = `${BASE_URL}/api/message/inbox/?format=json`;
 const USER_STATUS_API_URL = `${BASE_URL}/api/webapp/userstatus`;
 const APP_HOME_URL_FRAGMENT = '/app/';
 
-const APP_VERSION = '1.7.9';
+const APP_VERSION = '1.8.0';
 
 const CHANGELOG_DATA = [
+  { version: '1.8.0', changes: ['Drastically optimized battery usage', 'Centered back header titles on all pages', 'Migrated to native fetch for faster and more reliable network requests', 'General bug fixes'] },
   { version: '1.7.9', changes: ['Removed ipad support', 'Added autologin', 'Added new message notification badge', 'Fixed message details not loading or looking weird', 'Updated dependencies & packages', 'other bug fixes'] },
   { version: '1.7.8', changes: ['Fixed gpa not bieng accurate', 'other bug fixes'] },
   { version: '1.7.7', changes: ['Added change assignment status', 'Added ability to send POST requests to the server', 'Added the ability to send messages', 'Lots of bug fixes'] },
   { version: '1.7.6', changes: ['Fixed clicker saving too much', 'Added custom app backgrounds', 'Added dark/tinted icons'] },
-  { version: '1.7.5', changes: ['Added shop for clicker', 'added useless tips'] },
-  { version: '1.7.5', changes: ['Fixed score not saving correctly', 'fixed webview offset'] },
+  { version: '1.7.5', changes: ['Added shop for clicker', 'added useless tips', 'Fixed score not saving correctly', 'fixed webview offset'] },
   { version: '1.7.4', changes: ['Added Messages Page', 'also added clicker game cuz I got bored and why not'] },
   { version: '1.7.3', changes: ['Added text Formatting and styling for descriptions, etc.'] },
   { version: '1.7.2', changes: ['Added preview mode'] },
@@ -244,81 +244,121 @@ const App = () => {
 
   const webviewRef = useRef(null);
 
-  const fetchApiInWebView = (url, type = 'GENERIC', options = {}) => {
+  const processApiResponse = (message) => {
+    const triggerRelogin = (reason) => {
+      setIsLoading(false);
+      setUserInfo(null);
+      setAssignments(null);
+      setSchedule({});
+      setAuthStatus('LOGGED_OUT');
+      setLoginReason(reason);
+      console.log('[Relogin] Triggered.');
+      setIsReloginMode(true);
+      setCsrfToken(null);
+      resetWebViewToBase();  // only this first redirect
+    };
+
+    if (message.type === 'API_ERROR') {
+      triggerRelogin(`API Error: ${message.warning || message.error || 'Unknown Error'}. Please sign in.`);
+      return;
+    }
+
+    if (message.success) {
+      let responseData;
+      try { responseData = JSON.parse(message.data); }
+      catch (e) { triggerRelogin('Failed to parse a server response. Please sign in again.'); return; }
+
+      if (responseData.Error) { triggerRelogin('Your session has expired. Please sign in again.'); return; }
+
+      if (message.type === 'CONTEXT') {
+        setUserInfo(responseData.UserInfo);
+        setAuthStatus('LOGGED_IN');
+      } else if (message.type === 'ASSIGNMENTS') {
+        setAssignments(responseData);
+      } else if (message.type === 'STATUS_UPDATE') {
+        fetchApiInWebView(ASSIGNMENTS_API_URL, 'ASSIGNMENTS');
+      } else if (message.type === 'SCHEDULE') {
+        const dateMatch = message.requestUrl?.match(/scheduleDate=([\d%F]+)/);
+        if (dateMatch) {
+          const dateKey = decodeURIComponent(dateMatch[1]);
+          setSchedule(prev => ({ ...prev, [dateKey]: responseData }));
+        }
+      } else if (message.type === 'ASSIGNMENT_DETAIL') {
+        setAssignmentDetails(prev => ({ ...prev, [responseData.AssignmentIndexId]: responseData }));
+      }
+      else if (message.type === 'GRADES') {
+        setGrades(responseData);
+      }
+      else if (message.type === 'GRADE_DETAILS') {
+        setSelectedCourseDetails(responseData);
+      }
+      else if (message.type === 'MESSAGES') {
+        setMessages(responseData);
+      }
+      else if (message.type === 'USER_STATUS') {
+        setUnreadCount(responseData.UnreadMessageCount || 0);
+      }
+      else if (message.type === 'FETCH_RECIPIENTS') {
+        try {
+          const parsed = Array.isArray(responseData)
+            ? responseData
+            : JSON.parse(responseData || '[]');
+          console.log('[Recipients] Loaded', parsed.length);
+          setAllRecipients(parsed);
+        } catch (err) {
+          console.warn('Failed to parse recipients:', err);
+        }
+      }
+      setIsLoading(false);
+    }
+  };
+
+  const fetchApiInWebView = async (url, type = 'GENERIC', options = {}) => {
     if (previewMode) return;
     setIsLoading(true);
     const method = options.method || 'GET';
     const body = options.body ? JSON.stringify(options.body) : null;
-    const script = `
-      fetch("${url}", { 
-        method: '${method}',
-        headers: { 
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: {
           'Content-Type': 'application/json; charset=utf-8',
-          'Accept': 'application/json, text/javascript, */*; q=0.01', 
-          'X-Requested-With': 'XMLHttpRequest' 
+          'Accept': 'application/json, text/javascript, */*; q=0.01',
+          'X-Requested-With': 'XMLHttpRequest'
         },
-        ${body ? `body: JSON.stringify(${body})` : ''}
-      })
-      .then(response => {
-        if (!response.ok) throw new Error('HTTP Status ' + response.status);
-        return response.text();
-      })
-      .then(data => {
-        window.ReactNativeWebView.postMessage(JSON.stringify({ type: '${type}', data: data, success: true, requestUrl: "${url}" }));
-      })
-      .catch(error => {
-        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'API_ERROR', error: error.message }));
+        body,
+        credentials: 'include'
       });
-      true;
-    `;
-    console.log('[WebView Fetch]', type, url);
-    webviewRef.current?.injectJavaScript(script);
+      if (!response.ok) throw new Error('HTTP Status ' + response.status);
+      const text = await response.text();
+      processApiResponse({ type, data: text, success: true, requestUrl: url });
+    } catch (error) {
+      processApiResponse({ type: 'API_ERROR', error: error.message });
+    }
   };
 
-  const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
+  const postApiInWebView = async (url, type = 'GENERIC', body = {}) => {
     if (!csrfToken) {
       console.warn('[POST DEBUG] Missing CSRF token — aborting.');
       return;
     }
-
-    const debugScript = `
-    console.log('[POST DEBUG] Sending POST to: ${url}');
-    console.log('[POST DEBUG] Body:', ${JSON.stringify(body)});
-    console.log('[POST DEBUG] Token:', '${csrfToken}');
-
-    fetch("${url}", {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json, text/plain, */*',
-        'requestverificationtoken': '${csrfToken}'
-      },
-      body: JSON.stringify(${JSON.stringify(body)})
-    })
-    .then(async (r) => {
-      const text = await r.text();
-      console.log('[POST DEBUG] Status:', r.status);
-      console.log('[POST DEBUG] Response text:', text.slice(0, 500)); // limit to 500 chars
-      window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: '${type}',
-        status: r.status,
-        success: r.ok,
-        data: text
-      }));
-    })
-    .catch(e => {
-      console.log('[POST DEBUG] ERROR:', e.message);
-      window.ReactNativeWebView.postMessage(JSON.stringify({
-        type: 'API_ERROR',
-        error: e.message
-      }));
-    });
-    true;
-  `;
-
-    console.log('[WebView POST]', type, url, body);
-    webviewRef.current?.injectJavaScript(debugScript);
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/plain, */*',
+          'requestverificationtoken': csrfToken
+        },
+        body: JSON.stringify(body),
+        credentials: 'include'
+      });
+      const text = await response.text();
+      processApiResponse({ type, data: text, success: response.ok, status: response.status });
+    } catch (error) {
+      processApiResponse({ type: 'API_ERROR', error: error.message });
+    }
   };
 
   useEffect(() => {
@@ -327,85 +367,15 @@ const App = () => {
     }
   }, [authStatus]);
 
-
   const handleWebViewMessage = (event) => {
     try {
       const message = JSON.parse(event.nativeEvent.data);
-
       if (message.type === 'CSRF_TOKEN') {
         setCsrfToken(message.data?.replace(/"/g, '').trim());
         console.log('[CSRF TOKEN SAVED]', message.data);
-        return; // stop here, don’t parse further
+        return; // stop here
       }
-
-      const triggerRelogin = (reason) => {
-        setIsLoading(false);
-        setUserInfo(null);
-        setAssignments(null);
-        setSchedule({});
-        setAuthStatus('LOGGED_OUT');
-        setLoginReason(reason);
-        console.log('[Relogin] Triggered.');
-        setIsReloginMode(true);
-        setIsLoggedIn(false);
-        clearSessionCookies();
-        resetWebViewToBase();  // only this first redirect
-      };
-
-      if (message.type === 'API_ERROR') {
-        triggerRelogin(`API Error: ${message.warning}. Please sign in.`);
-        return;
-      }
-
-      if (message.success) {
-        // console.log('[POST RESPONSE]', message.status, message.data);
-        let responseData;
-        try { responseData = JSON.parse(message.data); }
-        catch (e) { triggerRelogin('Failed to parse a server response. Please sign in again.'); return; }
-
-        if (responseData.Error) { triggerRelogin('Your session has expired. Please sign in again.'); return; }
-
-        if (message.type === 'CONTEXT') {
-          setUserInfo(responseData.UserInfo);
-          setAuthStatus('LOGGED_IN');
-        } else if (message.type === 'ASSIGNMENTS') {
-          setAssignments(responseData);
-        } else if (message.type === 'STATUS_UPDATE') {
-          fetchApiInWebView(ASSIGNMENTS_API_URL, 'ASSIGNMENTS');
-        } else if (message.type === 'SCHEDULE') {
-          const dateMatch = message.requestUrl.match(/scheduleDate=([\d%F]+)/);
-          if (dateMatch) {
-            const dateKey = decodeURIComponent(dateMatch[1]);
-            setSchedule(prev => ({ ...prev, [dateKey]: responseData }));
-          }
-        } else if (message.type === 'ASSIGNMENT_DETAIL') {
-          setAssignmentDetails(prev => ({ ...prev, [responseData.AssignmentIndexId]: responseData }));
-        }
-        else if (message.type === 'GRADES') {
-          setGrades(responseData);
-        }
-        else if (message.type === 'GRADE_DETAILS') {
-          setSelectedCourseDetails(responseData);
-        }
-        else if (message.type === 'MESSAGES') {
-          setMessages(responseData);
-        }
-        else if (message.type === 'USER_STATUS') {
-          setUnreadCount(responseData.UnreadMessageCount || 0);
-        }
-        else if (message.type === 'FETCH_RECIPIENTS') {
-          try {
-            const parsed = Array.isArray(responseData)
-              ? responseData
-              : JSON.parse(responseData || '[]');
-            console.log('[Recipients] Loaded', parsed.length);
-            setAllRecipients(parsed); // 👈 no renaming, keep keys as-is
-          } catch (err) {
-            console.warn('Failed to parse recipients:', err);
-          }
-        }
-        setIsLoading(false);
-      }
+      processApiResponse(message);
     } catch (e) { /* Ignore non-JSON messages */ }
   };
 
@@ -442,8 +412,11 @@ const App = () => {
 
   useEffect(() => {
     if (authStatus === 'LOGGING_IN' && !userInfo) {
-      fetchApiInWebView(CONTEXT_API_URL, 'CONTEXT');
-      fetchApiInWebView(USER_STATUS_API_URL, 'USER_STATUS');
+      // Delay to ensure WKWebView cookies sync to native fetch before calling
+      setTimeout(() => {
+        fetchApiInWebView(CONTEXT_API_URL, 'CONTEXT');
+        fetchApiInWebView(USER_STATUS_API_URL, 'USER_STATUS');
+      }, 1500);
     }
   }, [authStatus]);
 
@@ -593,28 +566,30 @@ const App = () => {
           <ChangelogPage onClose={() => setIsChangelogVisible(false)} />
         </Modal>
 
-        {/* Persistent WebView is always rendered. It's hidden with styling when logged in. */}
-        <View style={authStatus === 'LOGGED_IN' ? styles.webviewHidden : styles.webviewVisible}>
-          <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-            <View style={styles.loginHeader}>
-              <Text style={styles.loginTitle}>MCDS Mobile</Text>
-              {authStatus === 'LOGGED_OUT' && <Text style={styles.subtitle}>{loginReason}</Text>}
-              <TouchableOpacity onPress={() => { setPreviewMode(true); setAuthStatus('LOGGED_IN'); }} style={styles.skipButton}>
-                <Text style={styles.skipText}>Skip</Text>
-              </TouchableOpacity>
-            </View>
-            <WebView
-              ref={webviewRef}
-              source={{ uri: LOGIN_URL }}
-              onMessage={handleWebViewMessage}
-              onNavigationStateChange={handleNavigationStateChange}
-              sharedCookiesEnabled={true}
-              thirdPartyCookiesEnabled={true}
-              originWhitelist={['*']}
-            />
-            {authStatus === 'LOGGING_IN' && <LoadingOverlay text="Verifying session..." />}
-          </SafeAreaView>
-        </View>
+        {/* Persistent WebView is conditionally rendered. */}
+        {!(authStatus === 'LOGGED_IN' && csrfToken) && (
+          <View style={authStatus === 'LOGGED_IN' ? styles.webviewHidden : styles.webviewVisible}>
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+              <View style={styles.loginHeader}>
+                <Text style={styles.loginTitle}>MCDS Mobile</Text>
+                {authStatus === 'LOGGED_OUT' && <Text style={styles.subtitle}>{loginReason}</Text>}
+                <TouchableOpacity onPress={() => { setPreviewMode(true); setAuthStatus('LOGGED_IN'); }} style={styles.skipButton}>
+                  <Text style={styles.skipText}>Skip</Text>
+                </TouchableOpacity>
+              </View>
+              <WebView
+                ref={webviewRef}
+                source={{ uri: LOGIN_URL }}
+                onMessage={handleWebViewMessage}
+                onNavigationStateChange={handleNavigationStateChange}
+                sharedCookiesEnabled={true}
+                thirdPartyCookiesEnabled={true}
+                originWhitelist={['*']}
+              />
+              {authStatus === 'LOGGING_IN' && <LoadingOverlay text="Verifying session..." />}
+            </SafeAreaView>
+          </View>
+        )}
 
         {/* Main app content is only displayed on top when fully logged in */}
         {authStatus === 'LOGGED_IN' && userInfo && (
@@ -663,6 +638,9 @@ const App = () => {
               setAllRecipients={setAllRecipients}
               richRef={richRef}
               unreadCount={unreadCount}
+              debugExpireToken={() => {
+                processApiResponse({ type: 'API_ERROR', error: 'Debug: Simulated Token Expiration' });
+              }}
             />
             <GradeDetailsModal
               visible={!!selectedCourseDetails}
@@ -682,17 +660,19 @@ const App = () => {
 
 const BackHeader = ({ title, onBack }) => (
   <View style={styles.backHeader}>
-    <TouchableOpacity onPress={onBack} style={styles.backButton}>
-      <Text style={styles.backArrow}>{'‹'}</Text>
-      <Text style={styles.backText}>Back</Text>
-    </TouchableOpacity>
+    <View style={{ width: 80, alignItems: 'flex-start' }}>
+      <TouchableOpacity onPress={onBack} style={styles.backButton}>
+        <Text style={styles.backArrow}>{'‹'}</Text>
+        <Text style={styles.backText}>Back</Text>
+      </TouchableOpacity>
+    </View>
     <Text style={styles.backHeaderTitle}>{title}</Text>
-    <View style={{ width: 60 }} />
+    <View style={{ width: 80 }} />
   </View>
 );
 
 // --- Page Content Wrapper with Transitions ---
-const PageContent = ({ activePage, userInfo, richRef, assignments, postApiInWebView, fetchAllMessages, setFetchAllMessages, fetchAssignments, assignmentDetails, fetchAssignmentDetails, schedule, fetchSchedule, isLoading, onOpenChangelog, onNavigate, grades, fetchGrades, fetchGradeDetails, messages, fetchMessages, selectedMessage, setSelectedMessage, backgroundUri, blurAmount, setBackgroundUri, setBlurAmount, fetchApiInWebView, setAllRecipients, allRecipients, unreadCount }) => {
+const PageContent = ({ activePage, userInfo, richRef, assignments, postApiInWebView, fetchAllMessages, setFetchAllMessages, fetchAssignments, assignmentDetails, fetchAssignmentDetails, schedule, fetchSchedule, isLoading, onOpenChangelog, onNavigate, grades, fetchGrades, fetchGradeDetails, messages, fetchMessages, selectedMessage, setSelectedMessage, backgroundUri, blurAmount, setBackgroundUri, setBlurAmount, fetchApiInWebView, setAllRecipients, allRecipients, unreadCount, debugExpireToken }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     fadeAnim.setValue(0);
@@ -756,12 +736,19 @@ const PageContent = ({ activePage, userInfo, richRef, assignments, postApiInWebV
           setBlurAmount={setBlurAmount}
           fetchAllMessages={fetchAllMessages}
           setFetchAllMessages={setFetchAllMessages}
+          userInfo={userInfo}
+          debugExpireToken={debugExpireToken}
         />
       );
       break;
     case 'Resources':
       currentPageComponent = (
-        <ResourcesPage onNavigateBack={() => onNavigate('More')} />
+        <ResourcesPage onNavigateBack={() => onNavigate('More')} onNavigate={onNavigate} />
+      );
+      break;
+    case 'Announcements':
+      currentPageComponent = (
+        <AnnouncementsPage onNavigateBack={() => onNavigate('Resources')} />
       );
       break;
     default: currentPageComponent = <PlaceholderPage title="Not Found" onNavigateBack={() => onNavigate('More')} />;
@@ -789,7 +776,7 @@ const HomePage = ({ userInfo, unreadCount, onNavigate }) => {
           </View>
         ) : (
           <View>
-            <View style={[styles.profileImage, styles.profileImagePlaceholder]}><Text style={styles.profileImagePlaceholderText}>{userInfo.FirstName.charAt(0)}</Text></View>
+            <View style={[styles.profileImage, styles.profileImagePlaceholder]}><Text style={styles.profileImagePlaceholderText}>{userInfo?.FirstName?.charAt(0) || 'U'}</Text></View>
             {unreadCount > 0 && (
               <View style={styles.notificationBadge}>
                 <Text style={styles.notificationText}>{unreadCount}</Text>
@@ -965,7 +952,7 @@ const AssignmentCenterPage = ({ assignments, fetchAssignments, setAssignments, p
 const AssignmentCard = ({ assignment, onSelect }) => {
   const { status, color } = getStatusInfo(assignment.AssignmentStatusType);
   const cleanHtml = (str) => str?.replace(/<[^>]*>/g, '').replace(/&#160;/g, ' ') || '';
-  return (<TouchableOpacity onPress={onSelect} style={styles.assignmentCard}><View style={styles.assignmentHeader}><Text style={styles.assignmentClass} numberOfLines={1}>{assignment.GroupName}</Text><Text style={[styles.assignmentStatus, { color }]}>{status}</Text></View><Text style={styles.assignmentDesc}><FormattedText html={assignment.ShortDescription} /></Text><Text style={styles.assignmentDue}>Due: {moment(assignment.DateDue, "M/D/YYYY h:mm A").format('ddd, MMM D [at] h:mm A')}</Text></TouchableOpacity>);
+  return (<TouchableOpacity onPress={onSelect} style={styles.assignmentCard}><View style={styles.assignmentHeader}><Text style={styles.assignmentClass} numberOfLines={1}>{assignment.GroupName}</Text><Text style={[styles.assignmentStatus, { color }]}>{status}</Text></View><Text style={styles.assignmentDesc} numberOfLines={2}>{cleanHtml(assignment.ShortDescription)}</Text><Text style={styles.assignmentDue}>Due: {moment(assignment.DateDue, "M/D/YYYY h:mm A").format('ddd, MMM D [at] h:mm A')}</Text></TouchableOpacity>);
 };
 
 const AssignmentDetailModal = ({
@@ -1310,7 +1297,7 @@ const MessagesPage = ({
 
   // --- Fetch all recipients once ---
   const openComposer = () => {
-    Alert.alert("Warning: This feature may have bugs! Be sure to report any to franco.")
+    Alert.alert("Warning: This feature may have bugs! Be sure to report any to Franco.")
     setIsComposing(true);
     if (allRecipients.length === 0) {
       fetchApiInWebView(
@@ -1432,7 +1419,7 @@ const MessagesPage = ({
             const isUnread = latest?.ReadInd === false;
             const subject = msg.Subject || '(No Subject)';
             const preview =
-              latest.Body?.replace(/<[^>]+>/g, '')?.slice(0, 120)?.trim() || '';
+              latest.Body?.replace(/<[^>]+>/g, '')?.replace(/&nbsp;/g, ' ')?.slice(0, 120)?.trim() || '';
             const isSelected = selectedIds.has(conversationId);
 
             return (
@@ -1772,7 +1759,7 @@ const ClickGamePage = ({ onNavigateBack, userInfo }) => {
   }, []);
 
   // --- Game constants ---
-  const nameKey = `${userInfo.FirstName} ${userInfo.LastName.charAt(0)}.`;
+  const nameKey = `${userInfo?.FirstName || 'User'} ${userInfo?.LastName?.charAt(0) || ''}.`;
   const formatNumber = (num) => num.toLocaleString();
   const rebirthStages = [
     { cost: 150000, multiplier: 2 },
@@ -2224,16 +2211,21 @@ const GradesPage = ({ userInfo, grades, fetchGrades, fetchGradeDetails, isLoadin
 
       {/* GPA Summary */}
       {grades && grades.length > 0 && (
-        <View style={styles.gpaContainer}>
-          <View style={styles.gpaBox}>
-            <Text style={styles.gpaLabel}>Weighted GPA</Text>
-            <Text style={styles.gpaValue}>{weighted}</Text>
+        <>
+          <View style={[styles.gpaContainer, { marginBottom: 5 }]}>
+            <View style={styles.gpaBox}>
+              <Text style={styles.gpaLabel}>Weighted GPA</Text>
+              <Text style={styles.gpaValue}>{weighted}</Text>
+            </View>
+            <View style={styles.gpaBox}>
+              <Text style={styles.gpaLabel}>Unweighted GPA</Text>
+              <Text style={styles.gpaValue}>{unweighted}</Text>
+            </View>
           </View>
-          <View style={styles.gpaBox}>
-            <Text style={styles.gpaLabel}>Unweighted GPA</Text>
-            <Text style={styles.gpaValue}>{unweighted}</Text>
-          </View>
-        </View>
+          <Text style={{ color: '#888888', fontSize: 12, textAlign: 'center', marginBottom: 20 }}>
+            *These values are estimated and may be inaccurate.
+          </Text>
+        </>
       )}
 
       <ScrollView
@@ -2333,7 +2325,7 @@ const GradeDetailsModal = ({ visible, details, onClose }) => {
   );
 };
 
-const SettingsPage = ({ onNavigateBack, backgroundUri, blurAmount, setBackgroundUri, setFetchAllMessages, fetchAllMessages, setBlurAmount }) => {
+const SettingsPage = ({ onNavigateBack, backgroundUri, blurAmount, setBackgroundUri, setFetchAllMessages, fetchAllMessages, setBlurAmount, userInfo, debugExpireToken }) => {
   const [localBackgroundUri, setLocalBackgroundUri] = useState(null);
   const [localBlurAmount, setLocalBlurAmount] = useState(0);
 
@@ -2488,16 +2480,25 @@ const SettingsPage = ({ onNavigateBack, backgroundUri, blurAmount, setBackground
             thumbColor="#FFF"
           />
         </View>
+
+        {userInfo?.FirstName === 'Franco' && userInfo?.LastName === 'Betancourt' && (
+          <View style={{ marginTop: 20 }}>
+            <Text style={styles.settingsCardTitle}>Developer Tools</Text>
+            <TouchableOpacity style={{ backgroundColor: '#FF3B30', marginTop: 10, padding: 15, borderRadius: 10, alignItems: 'center', marginBottom: 20 }} onPress={debugExpireToken}>
+              <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 }}>Force Token Expiration</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
 };
 
 
-const ResourcesPage = ({ onNavigateBack }) => {
+const ResourcesPage = ({ onNavigateBack, onNavigate }) => {
   const handleOpenLink = (url) => { Linking.openURL(url).catch(err => console.error("Couldn't load page", err)); };
-  const ResourceItem = ({ label, url }) => (
-    <TouchableOpacity style={styles.menuItem} onPress={() => handleOpenLink(url)}>
+  const ResourceItem = ({ label, onPress, url }) => (
+    <TouchableOpacity style={styles.menuItem} onPress={onPress || (() => handleOpenLink(url))}>
       <Text style={styles.menuItemText}>{label}</Text>
       <Text style={styles.menuItemArrow}>{'>'}</Text>
     </TouchableOpacity>
@@ -2507,10 +2508,34 @@ const ResourcesPage = ({ onNavigateBack }) => {
     <View style={[styles.pageContentContainer, styles.placeholderAlignment]}>
       <BackHeader title="Resources" onBack={onNavigateBack} />
       <View style={styles.menuList}>
-        <ResourceItem label="Announcements" url="https://www.canva.com/design/DAGOf_CuuSg/Lp8cITfl7i2Rfe4ehxPkwg/edit" />
+        <ResourceItem label="Announcements" onPress={() => onNavigate('Announcements')} />
         <ResourceItem label="Lunch Menu" url="https://www.sagedining.com/sites/miamicountryday/menu" />
         <ResourceItem label="The Spartacus" url="https://www.thespartacus.com" />
       </View>
+    </View>
+  );
+};
+
+const AnnouncementsPage = ({ onNavigateBack }) => {
+  return (
+    <View style={styles.pageContentContainer}>
+      <BackHeader title="Announcements" onBack={onNavigateBack} />
+      <View style={{ flex: 1, width: '100%', borderRadius: 12, overflow: 'hidden', marginVertical: 10, backgroundColor: '#1C1C1E' }}>
+        <WebView
+          source={{ uri: 'https://www.canva.com/design/DAGOf_CuuSg/bYI3bPgkqWFsQZHnTXcOMQ/view?embed#2' }}
+          style={{ flex: 1 }}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          originWhitelist={['*']}
+          allowsInlineMediaPlayback={true}
+        />
+      </View>
+      <TouchableOpacity
+        style={{ backgroundColor: '#0A84FF', padding: 15, borderRadius: 10, alignItems: 'center', marginBottom: 20 }}
+        onPress={() => Linking.openURL('https://www.canva.com/design/DAGOf_CuuSg/bYI3bPgkqWFsQZHnTXcOMQ/view').catch(err => console.error("Couldn't open browser", err))}
+      >
+        <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 }}>Open in Browser</Text>
+      </TouchableOpacity>
     </View>
   );
 };
