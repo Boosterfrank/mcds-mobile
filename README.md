@@ -28,3 +28,32 @@ The app bypasses the limitations of traditional API integrations by utilizing a 
 2. Once authenticated, the WebView is hidden.
 3. The app communicates with the WebView using injected JavaScript (`fetchApiInWebView`, `postApiInWebView`) to make requests directly to the portal's internal APIs (e.g., `/api/webapp/context`, `/api/assignment2/...`).
 4. Data is passed back to React Native via `window.ReactNativeWebView.postMessage` and rendered in the native UI.
+
+Developer Notes:
+### Always run this command first to download any changes you might have made on another device.
+```
+git pull
+```
+### build & submit to ios: 
+```
+$env:EAS_SKIP_AUTO_FINGERPRINT=1; eas build --platform ios
+```
+```
+eas submit --platform ios
+```
+## save to github: 
+```
+git commit -m "fixstuff"
+```
+#### if you get error then
+```
+git add "filepath"
+```
+#### then
+```
+git push -u origin main
+```
+## test on devices
+```
+npx expo start
+```
