@@ -108,6 +108,7 @@ const App = () => {
   const [blurAmount, setBlurAmount] = useState(0);
   const [showTips, setShowTips] = useState(true);
   const [csrfToken, setCsrfToken] = useState(null);
+  const autoLoginFired = useRef(false);
   const [fetchAllMessages, setFetchAllMessages] = useState(false);
   const [isReloginMode, setIsReloginMode] = useState(false);
 
@@ -223,10 +224,7 @@ const App = () => {
         }));
       })
       .catch(err => {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'API_ERROR',
-          error: err.message
-        }));
+        // Do not post API_ERROR here. The React Native interval will retry automatically.
       });
       true;
     `;
@@ -234,6 +232,37 @@ const App = () => {
     console.log('[CSRF] Fetching new token...');
     webviewRef.current.injectJavaScript(script);
   };
+
+  const fetchAuthDataInWebView = () => {
+    if (!webviewRef.current) return;
+    console.log('[Auth] Fetching Context & Status directly inside WebView...');
+    const script = `
+      function checkAuth() {
+        Promise.all([
+          fetch("${CONTEXT_API_URL}", {credentials: 'include'}).then(r => r.text()),
+          fetch("${USER_STATUS_API_URL}", {credentials: 'include'}).then(r => r.text())
+        ]).then(([context, userStatus]) => {
+          try {
+            const parsedContext = JSON.parse(context);
+            if (parsedContext && parsedContext.UserInfo && parsedContext.UserInfo.FirstName) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'CONTEXT', data: context, success: true }));
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_STATUS', data: userStatus, success: true }));
+            } else {
+              setTimeout(checkAuth, 1500);
+            }
+          } catch (e) {
+            setTimeout(checkAuth, 1500);
+          }
+        }).catch(err => {
+          setTimeout(checkAuth, 1500);
+        });
+      }
+      checkAuth();
+      true;
+    `;
+    webviewRef.current.injectJavaScript(script);
+  };
+
   useEffect(() => {
     const loadSettings = async () => {
       const savedTips = await AsyncStorage.getItem('showTips');
@@ -245,6 +274,9 @@ const App = () => {
   const webviewRef = useRef(null);
 
   const processApiResponse = (message) => {
+    const validTypes = ['CONTEXT', 'USER_STATUS', 'ASSIGNMENTS', 'SCHEDULE', 'ASSIGNMENT_DETAIL', 'GRADES', 'GRADE_DETAILS', 'MESSAGES', 'FETCH_RECIPIENTS', 'GENERIC', 'API_ERROR'];
+    if (!validTypes.includes(message.type)) return;
+
     const triggerRelogin = (reason) => {
       setIsLoading(false);
       setUserInfo(null);
@@ -252,13 +284,18 @@ const App = () => {
       setSchedule({});
       setAuthStatus('LOGGED_OUT');
       setLoginReason(reason);
-      console.log('[Relogin] Triggered.');
+      console.log(`[Relogin] Triggered. Reason: ${reason}`);
+      autoLoginFired.current = false;
       setIsReloginMode(true);
       setCsrfToken(null);
-      resetWebViewToBase();  // only this first redirect
+      resetWebViewToBase();
     };
 
     if (message.type === 'API_ERROR') {
+      if (message.error === 'Load failed') {
+        console.log('[API] Ignored harmless "Load failed" error due to page navigation.');
+        return;
+      }
       triggerRelogin(`API Error: ${message.warning || message.error || 'Unknown Error'}. Please sign in.`);
       return;
     }
@@ -266,7 +303,7 @@ const App = () => {
     if (message.success) {
       let responseData;
       try { responseData = JSON.parse(message.data); }
-      catch (e) { triggerRelogin('Failed to parse a server response. Please sign in again.'); return; }
+      catch (e) { triggerRelogin(`Failed to parse a server response for type: ${message.type}. Please sign in again.`); return; }
 
       if (responseData.Error) { triggerRelogin('Your session has expired. Please sign in again.'); return; }
 
@@ -313,59 +350,78 @@ const App = () => {
     }
   };
 
-  const fetchApiInWebView = async (url, type = 'GENERIC', options = {}) => {
+  const fetchApiInWebView = (url, type = 'GENERIC', options = {}) => {
     if (previewMode) return;
     setIsLoading(true);
     const method = options.method || 'GET';
-    const body = options.body ? JSON.stringify(options.body) : null;
+    const bodyStr = options.body ? JSON.stringify(options.body) : null;
 
-    try {
-      const response = await fetch(url, {
-        method,
+    if (!webviewRef.current) return;
+    const script = `
+      fetch("${url}", {
+        method: "${method}",
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
           'Accept': 'application/json, text/javascript, */*; q=0.01',
           'X-Requested-With': 'XMLHttpRequest'
         },
-        body,
+        ${bodyStr ? `body: JSON.stringify(${bodyStr}),` : ''}
         credentials: 'include'
+      })
+      .then(res => {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.text();
+      })
+      .then(text => {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: '${type}', data: text, success: true, requestUrl: "${url}" }));
+      })
+      .catch(err => {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'API_ERROR', error: err.message }));
       });
-      if (!response.ok) throw new Error('HTTP Status ' + response.status);
-      const text = await response.text();
-      processApiResponse({ type, data: text, success: true, requestUrl: url });
-    } catch (error) {
-      processApiResponse({ type: 'API_ERROR', error: error.message });
-    }
+      true;
+    `;
+    webviewRef.current.injectJavaScript(script);
   };
 
-  const postApiInWebView = async (url, type = 'GENERIC', body = {}) => {
+  const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
     if (!csrfToken) {
       console.warn('[POST DEBUG] Missing CSRF token — aborting.');
       return;
     }
-    try {
-      const response = await fetch(url, {
+    if (!webviewRef.current) return;
+    const script = `
+      fetch("${url}", {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/plain, */*',
-          'requestverificationtoken': csrfToken
+          'requestverificationtoken': "${csrfToken}"
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(${JSON.stringify(body)}),
         credentials: 'include'
+      })
+      .then(res => res.text().then(text => ({ ok: res.ok, status: res.status, text })))
+      .then(({ ok, status, text }) => {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: '${type}', data: text, success: ok, status }));
+      })
+      .catch(err => {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'API_ERROR', error: err.message }));
       });
-      const text = await response.text();
-      processApiResponse({ type, data: text, success: response.ok, status: response.status });
-    } catch (error) {
-      processApiResponse({ type: 'API_ERROR', error: error.message });
-    }
+      true;
+    `;
+    webviewRef.current.injectJavaScript(script);
   };
 
   useEffect(() => {
-    if (authStatus === 'LOGGED_IN') {
-      fetchCsrfToken(); // Retrieve fresh token immediately after login
+    let interval;
+    if (authStatus === 'LOGGED_IN' && !csrfToken) {
+      fetchCsrfToken();
+      interval = setInterval(() => {
+        fetchCsrfToken();
+      }, 2000);
     }
-  }, [authStatus]);
+    return () => clearInterval(interval);
+  }, [authStatus, csrfToken]);
 
   const handleWebViewMessage = (event) => {
     try {
@@ -397,7 +453,8 @@ const App = () => {
   const handleNavigationStateChange = (navState) => {
 
     // If the page finished loading and we are at the login base URL
-    if (!navState.loading && navState.url === LOGIN_URL) {
+    if (!navState.loading && navState.url === LOGIN_URL && !autoLoginFired.current) {
+      autoLoginFired.current = true;
       // Small delay to ensure the DOM is fully interactive
       setTimeout(() => {
         webviewRef.current?.injectJavaScript(autoClickLogin);
@@ -412,19 +469,12 @@ const App = () => {
 
   useEffect(() => {
     if (authStatus === 'LOGGING_IN' && !userInfo) {
-      // Delay to ensure WKWebView cookies sync to native fetch before calling
-      setTimeout(() => {
-        fetchApiInWebView(CONTEXT_API_URL, 'CONTEXT');
-        fetchApiInWebView(USER_STATUS_API_URL, 'USER_STATUS');
-      }, 1500);
+      // The injected script now actively polls until a valid session is confirmed
+      fetchAuthDataInWebView();
     }
   }, [authStatus]);
 
-  useEffect(() => {
-    if (activePage === 'Home' && authStatus === 'LOGGED_IN') {
-      fetchApiInWebView(USER_STATUS_API_URL, 'USER_STATUS');
-    }
-  }, [activePage, authStatus]);
+
 
   const fetchAssignmentsCallback = useCallback(() => {
     fetchApiInWebView(ASSIGNMENTS_API_URL, 'ASSIGNMENTS');
@@ -566,30 +616,28 @@ const App = () => {
           <ChangelogPage onClose={() => setIsChangelogVisible(false)} />
         </Modal>
 
-        {/* Persistent WebView is conditionally rendered. */}
-        {!(authStatus === 'LOGGED_IN' && csrfToken) && (
-          <View style={authStatus === 'LOGGED_IN' ? styles.webviewHidden : styles.webviewVisible}>
-            <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-              <View style={styles.loginHeader}>
-                <Text style={styles.loginTitle}>MCDS Mobile</Text>
-                {authStatus === 'LOGGED_OUT' && <Text style={styles.subtitle}>{loginReason}</Text>}
-                <TouchableOpacity onPress={() => { setPreviewMode(true); setAuthStatus('LOGGED_IN'); }} style={styles.skipButton}>
-                  <Text style={styles.skipText}>Skip</Text>
-                </TouchableOpacity>
-              </View>
-              <WebView
-                ref={webviewRef}
-                source={{ uri: LOGIN_URL }}
-                onMessage={handleWebViewMessage}
-                onNavigationStateChange={handleNavigationStateChange}
-                sharedCookiesEnabled={true}
-                thirdPartyCookiesEnabled={true}
-                originWhitelist={['*']}
-              />
-              {authStatus === 'LOGGING_IN' && <LoadingOverlay text="Verifying session..." />}
-            </SafeAreaView>
-          </View>
-        )}
+        {/* Persistent WebView is ALWAYS rendered, but parked on a lightweight JSON page to save battery when logged in. */}
+        <View style={authStatus === 'LOGGED_IN' ? styles.webviewHidden : styles.webviewVisible}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+            <View style={styles.loginHeader}>
+              <Text style={styles.loginTitle}>MCDS Mobile</Text>
+              {authStatus === 'LOGGED_OUT' && <Text style={styles.subtitle}>{loginReason}</Text>}
+              <TouchableOpacity onPress={() => { setPreviewMode(true); setAuthStatus('LOGGED_IN'); }} style={styles.skipButton}>
+                <Text style={styles.skipText}>Skip</Text>
+              </TouchableOpacity>
+            </View>
+            <WebView
+              ref={webviewRef}
+              source={{ uri: LOGIN_URL }}
+              onMessage={handleWebViewMessage}
+              onNavigationStateChange={handleNavigationStateChange}
+              sharedCookiesEnabled={true}
+              thirdPartyCookiesEnabled={true}
+              originWhitelist={['*']}
+            />
+            {authStatus === 'LOGGING_IN' && <LoadingOverlay text="Verifying session..." />}
+          </SafeAreaView>
+        </View>
 
         {/* Main app content is only displayed on top when fully logged in */}
         {authStatus === 'LOGGED_IN' && userInfo && (
