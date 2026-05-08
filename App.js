@@ -144,7 +144,7 @@ const App = () => {
   const autoClickLogin = `
     (function() {
       let retries = 0;
-      const maxRetries = 2; // Try again 2 times
+      const maxRetries = 20; // Try again 20 times (20 * 250ms = 5 seconds)
 
       function attemptLogin() {
         const emailInput = document.getElementById('Username');
@@ -174,7 +174,7 @@ const App = () => {
       // 1. Try immediately
       if (attemptLogin()) return;
 
-      // 2. If failed, start interval (1 second delay)
+      // 2. If failed, start aggressive interval polling
       const interval = setInterval(() => {
         retries++;
         const success = attemptLogin();
@@ -182,11 +182,10 @@ const App = () => {
         if (success) {
           clearInterval(interval);
         } else if (retries >= maxRetries) {
-          // Stop trying after 2 retries
           clearInterval(interval);
           window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'AUTO_LOGIN_COMPLETE', success: false }));
         }
-      }, 1200); // 1000ms = 1 second
+      }, 250); // poll every 250ms
     })();
   `;
 
@@ -455,11 +454,8 @@ const App = () => {
     // If the page finished loading and we are at the login base URL
     if (!navState.loading && navState.url === LOGIN_URL && !autoLoginFired.current) {
       autoLoginFired.current = true;
-      // Small delay to ensure the DOM is fully interactive
-      setTimeout(() => {
-        webviewRef.current?.injectJavaScript(autoClickLogin);
-        console.log('[AutoLogin] Activated');
-      }, 2150);
+      webviewRef.current?.injectJavaScript(autoClickLogin);
+      console.log('[AutoLogin] Activated immediately');
     }
     // existing logic to detect login
     if (!navState.loading && navState.url.includes(APP_HOME_URL_FRAGMENT) && authStatus === 'LOGGED_OUT') {
