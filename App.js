@@ -60,7 +60,7 @@ const APP_HOME_URL_FRAGMENT = '/app/';
 const APP_VERSION = '1.8.0';
 
 const CHANGELOG_DATA = [
-  { version: '1.8.0', changes: ['Drastically optimized battery usage', 'Centered back header titles on all pages', 'Migrated to native fetch for faster and more reliable network requests', 'General bug fixes'] },
+  { version: '1.8.0', changes: ['optimized battery usage', 'Centered back header titles on all pages', 'Migrated to native fetch for faster and more reliable network requests', 'General bug fixes'] },
   { version: '1.7.9', changes: ['Removed ipad support', 'Added autologin', 'Added new message notification badge', 'Fixed message details not loading or looking weird', 'Updated dependencies & packages', 'other bug fixes'] },
   { version: '1.7.8', changes: ['Fixed gpa not bieng accurate', 'other bug fixes'] },
   { version: '1.7.7', changes: ['Added change assignment status', 'Added ability to send POST requests to the server', 'Added the ability to send messages', 'Lots of bug fixes'] },
