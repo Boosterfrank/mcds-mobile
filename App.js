@@ -236,27 +236,30 @@ const App = () => {
     if (!webviewRef.current) return;
     console.log('[Auth] Fetching Context & Status directly inside WebView...');
     const script = `
-      function checkAuth() {
-        Promise.all([
-          fetch("${CONTEXT_API_URL}", {credentials: 'include'}).then(r => r.text()),
-          fetch("${USER_STATUS_API_URL}", {credentials: 'include'}).then(r => r.text())
-        ]).then(([context, userStatus]) => {
-          try {
-            const parsedContext = JSON.parse(context);
-            if (parsedContext && parsedContext.UserInfo && parsedContext.UserInfo.FirstName) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'CONTEXT', data: context, success: true }));
-              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_STATUS', data: userStatus, success: true }));
-            } else {
+      if (!window.__authPollerInjected) {
+        window.__authPollerInjected = true;
+        function checkAuth() {
+          Promise.all([
+            fetch("${CONTEXT_API_URL}", {credentials: 'include'}).then(r => r.text()),
+            fetch("${USER_STATUS_API_URL}", {credentials: 'include'}).then(r => r.text())
+          ]).then(([context, userStatus]) => {
+            try {
+              const parsedContext = JSON.parse(context);
+              if (parsedContext && parsedContext.UserInfo && parsedContext.UserInfo.FirstName) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'CONTEXT', data: context, success: true }));
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'USER_STATUS', data: userStatus, success: true }));
+              } else {
+                setTimeout(checkAuth, 1500);
+              }
+            } catch (e) {
               setTimeout(checkAuth, 1500);
             }
-          } catch (e) {
+          }).catch(err => {
             setTimeout(checkAuth, 1500);
-          }
-        }).catch(err => {
-          setTimeout(checkAuth, 1500);
-        });
+          });
+        }
+        checkAuth();
       }
-      checkAuth();
       true;
     `;
     webviewRef.current.injectJavaScript(script);
@@ -458,8 +461,13 @@ const App = () => {
       console.log('[AutoLogin] Activated immediately');
     }
     // existing logic to detect login
-    if (!navState.loading && navState.url.includes(APP_HOME_URL_FRAGMENT) && authStatus === 'LOGGED_OUT') {
-      setAuthStatus('LOGGING_IN');
+    if (!navState.loading && navState.url.includes(APP_HOME_URL_FRAGMENT)) {
+      if (authStatus === 'LOGGED_OUT') {
+        setAuthStatus('LOGGING_IN');
+      } else if (authStatus === 'LOGGING_IN') {
+        // Reinject the poller if the page navigated/redirected while we were still waiting for the session to validate
+        fetchAuthDataInWebView();
+      }
     }
   };
 
