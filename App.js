@@ -386,6 +386,7 @@ const App = () => {
   };
 
   const postApiInWebView = (url, type = 'GENERIC', body = {}) => {
+    if (previewMode) return;
     if (!csrfToken) {
       console.warn('[POST DEBUG] Missing CSRF token — aborting.');
       return;
@@ -504,6 +505,7 @@ const App = () => {
     if (!userInfo) return;
     const url = `${GRADES_API_URL}?userId=${userInfo.UserId}&memberLevel=3&persona=2&durationList=172113`;
     fetchApiInWebView(url, 'GRADES');
+    console.log('[FetchGrades] Requesting grades:', url);
   }, [userInfo]);
 
   const fetchGradeDetails = useCallback((sectionId, markingPeriodId, studentId) => {
@@ -554,11 +556,15 @@ const App = () => {
   useEffect(() => {
     if (previewMode) {
       console.log('[PreviewMode] Activating Preview Data');
+
+      const today = new Date();
+      const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
+
       setUserInfo({
-        FirstName: 'User',
-        LastName: 'Preview',
-        Email: 'upreview29@miamicountryday.org',
-        StudentInfo: { GradYear: '2030' },
+        FirstName: 'Preview',
+        LastName: 'User',
+        Email: 'preview@miamicountryday.org',
+        StudentInfo: { GradYear: '2026' },
       });
 
       setAssignments({
@@ -567,39 +573,111 @@ const App = () => {
             AssignmentIndexId: 1,
             GroupName: 'Mathematics - H',
             ShortDescription: 'Algebra Worksheet',
-            LongDescription: "Good evening Upper School,&nbsp;\u003Cbr\u003EI'm excited to announce that I am hosting another \u003Cb\u003EFishing Competition\u003C/b\u003E on \u003Cb\u003EFisher Island\u003C/b\u003E on \u003Cb\u003ENovember 16 from 10am-12pm\u003C/b\u003E!&nbsp;\u003Cbr\u003E\u003Cbr\u003EThe last one was such a success and it was so nice to see your support.&nbsp;\u003Cbr\u003EYou can earn \u003Cb\u003E10 service hours\u003C/b\u003E by coming to the event. All you have to do is \u003Cb\u003Eregister\u003C/b\u003E by zelleing \u003Cb\u003Elena@bigdreamscf.org\u003C/b\u003E $100 and sending me the confirmation at 786 847 3178.&nbsp;\u003Cbr\u003E\u003Cbr\u003EThe purpose of the event is to continue to raise money to \u003Cb\u003Ereopen the operating room\u003C/b\u003E at Clinica Santa Rosa De Lima. I am visiting the clinic in November over Thanksgiving Break and want to raise the most money I can before my trip there. I am super excited to donate the \u003Cb\u003Efirst 10k\u003C/b\u003E that you all helped me raise.&nbsp;\u003Cbr\u003E\u003Cbr\u003EI hope to see you at the fishing competition. Reach out if you have any questions.&nbsp",
-            DateDue: '10/08/2025 11:59 PM',
+            LongDescription: "Complete the odd numbers on pages 45-46. Show all work.",
+            DateDue: `${dateStr} 11:59 PM`,
             AssignmentStatusType: 0
           },
+          {
+            AssignmentIndexId: 2,
+            GroupName: 'Biology - AP',
+            ShortDescription: 'Chapter 4 Outline',
+            LongDescription: "Read chapter 4 and create a detailed outline. Highlight key terms.",
+            DateDue: `${dateStr} 08:00 AM`,
+            AssignmentStatusType: 1
+          }
         ],
         PastThisWeek: [],
         PastBeforeLastWeek: [],
         PastLastWeek: [],
         Overdue: [],
-        DueTomorrow: [],
+        DueTomorrow: [
+          {
+            AssignmentIndexId: 3,
+            GroupName: 'World History',
+            ShortDescription: 'Essay Draft',
+            LongDescription: "Submit the first draft of your DBQ essay.",
+            DateDue: 'Tomorrow 11:59 PM',
+            AssignmentStatusType: 0
+          }
+        ],
         DueThisWeek: [],
         DueNextWeek: [],
         DueAfterNextWeek: [],
       });
 
       setSchedule({
-        '10/07/2025': [
+        [dateStr]: [
           {
             CourseTitle: 'Preview Science',
             Contact: 'Dr. Smith',
-            MyDayStartTime: '10:00 AM',
-            MyDayEndTime: '11:00 AM',
+            MyDayStartTime: '08:00 AM',
+            MyDayEndTime: '09:00 AM',
             BuildingName: 'Science Center',
             RoomNumber: '201',
+            Block: 'A'
+          },
+          {
+            CourseTitle: 'Preview Math',
+            Contact: 'Mrs. Johnson',
+            MyDayStartTime: '09:10 AM',
+            MyDayEndTime: '10:10 AM',
+            BuildingName: 'Main Building',
+            RoomNumber: '105',
             Block: 'B'
           },
+          {
+            CourseTitle: 'Lunch',
+            Contact: '',
+            MyDayStartTime: '10:15 AM',
+            MyDayEndTime: '11:00 AM',
+            BuildingName: 'Cafeteria',
+            RoomNumber: '',
+            Block: 'L'
+          },
+          {
+            CourseTitle: 'English Lit',
+            Contact: 'Mrs. Adams',
+            MyDayStartTime: '11:10 AM',
+            MyDayEndTime: '12:10 PM',
+            BuildingName: 'Humanities',
+            RoomNumber: '302',
+            Block: 'C'
+          }
         ]
       });
 
       setGrades([
         { sectionidentifier: 'Biology - AP', cumgrade: 95, groupownername: 'Mr. Turner', room: 'Lab 1', currentterm: 'Q1', sectionid: 1, markingperiodid: 123 },
         { sectionidentifier: 'Algebra II - H', cumgrade: 92, groupownername: 'Ms. Rivera', room: 'A103', currentterm: 'Q1', sectionid: 2, markingperiodid: 123 },
+        { sectionidentifier: 'World History', cumgrade: 88, groupownername: 'Dr. Lee', room: 'B204', currentterm: 'Q1', sectionid: 3, markingperiodid: 123 },
+        { sectionidentifier: 'English Lit', cumgrade: 97, groupownername: 'Mrs. Adams', room: 'C101', currentterm: 'Q1', sectionid: 4, markingperiodid: 123 },
       ]);
+
+      setMessages([
+        {
+          ConversationId: 101,
+          Subject: 'Assembly Tomorrow',
+          Messages: [{
+            Id: 1011,
+            FromUser: { UserNameFormatted: 'Skinner, Principal' },
+            ReadInd: false,
+            Body: "Don't forget about the assembly tomorrow morning in the main hall.",
+            DateSent: dateStr
+          }]
+        },
+        {
+          ConversationId: 102,
+          Subject: 'Q1 Grades Finalized',
+          Messages: [{
+            Id: 1021,
+            FromUser: { UserNameFormatted: 'Registrar Office' },
+            ReadInd: true,
+            Body: "Your quarter 1 grades have been finalized and updated on your transcript.",
+            DateSent: dateStr
+          }]
+        }
+      ]);
+      setUnreadCount(1);
     }
   }, [previewMode]);
 
