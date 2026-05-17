@@ -12,6 +12,7 @@
       "distribution": "internal"
     },
     "production": {
+      "node": "22.16.0",
       "autoIncrement": true,
       "env": {
         "EAS_SKIP_AUTO_FINGERPRINT": "1"
